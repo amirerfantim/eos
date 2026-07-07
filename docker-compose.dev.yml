@@ -10,3 +10,16 @@ services:
     volumes:
       - ./backend:/app          # live code; editable install picks up changes
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      - VITE_PROXY_TARGET=http://backend:8000
+    volumes:
+      - ./frontend:/app         # live source for HMR
+      - /app/node_modules       # keep container's installed deps
+    ports: !override
+      - "5173:5173"
+    command: ["pnpm", "dev", "--host", "0.0.0.0"]
