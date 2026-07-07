@@ -1,0 +1,34 @@
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+frontend/src/api/generated*.ts
+
+# Python / backend
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Docker
+*.pid
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Postgres local volume (if bind-mounted)
+pgdata/
