@@ -8,6 +8,9 @@ Theme: **dawn / ember glow** (sunrise gradients, glowing cards, growing-light st
 - Frontend and backend are **separate**. Feature-modular: a new domain = a new `features/<x>` folder on both ends, no cross-cutting edits.
 - Async everywhere on backend.
 
+## Design
+Theme: **Graphite Mono** — minimal/premium, near-black graphite ground, electric-violet accent, dark default, wow motion. Full tokens + motion spec → `docs/design.md`.
+
 ## Stack (why → `docs/architecture.md`)
 - **Frontend**: React + Vite + TS, Tailwind, Framer Motion, TanStack Query, vite-plugin-pwa.
 - **Backend**: FastAPI, SQLModel + Alembic, PostgreSQL. Async (asyncpg).
@@ -25,4 +28,13 @@ Theme: **dawn / ember glow** (sunrise gradients, glowing cards, growing-light st
 - Docs: `docs/architecture.md` (stack + why), `docs/api.md` (endpoints).
 
 ## Status
-Backend v1 **done + verified** (habits, completions, settings, streaks, health/ready probes; Alembic migrations; runs in Docker). Next: frontend. Current truth = git log + `docs/api.md`.
+**v1 done + verified in browser.** Full stack runs in Docker:
+- Backend: habits/completions/settings, streaks, health/ready, Alembic migrations.
+- Frontend: Today view — create/edit/delete habits, tap-to-complete (optimistic + spark/ring animation), streaks, day-progress ring, dark/light theme, PWA. Graphite Mono design.
+Verified: create → complete → streak → theme → persistence all work against the live API.
+Next candidates: habit detail + contribution heatmap, reorder, reminders, cloud deploy. Current truth = git log + `docs/api.md`.
+
+## Frontend notes
+- Feature-modular under `src/features/{habits,completions,dashboard,settings}`; shared `src/lib` (theme, motion, date), `src/api` (typed client + OpenAPI-generated types).
+- Regenerate API types after backend changes: `pnpm --dir frontend exec openapi-typescript http://localhost:8000/openapi.json -o src/api/generated.ts`.
+- Modal uses a portal to `document.body`. Theme persisted in `localStorage` (`eos-theme`), dark default.
