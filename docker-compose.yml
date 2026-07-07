@@ -1,0 +1,35 @@
+# Base Compose stack: PostgreSQL + FastAPI backend.
+# The frontend service is added in the frontend phase.
+# Dev overrides (hot reload, editable install) live in docker-compose.dev.yml.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eos}
+      POSTGRES_DB: ${POSTGRES_DB:-eos}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eos} -d ${POSTGRES_DB:-eos}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
