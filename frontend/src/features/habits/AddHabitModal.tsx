@@ -1,12 +1,23 @@
 // Create/edit sheet. Centered dialog on desktop, bottom sheet on mobile.
 
+import emojiData from '@emoji-mart/data'
+import EmojiPicker from '@emoji-mart/react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X } from 'lucide-react'
+import { Smile, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Habit, HabitCreate } from '../../api/types'
 import { overlay, sheet } from '../../lib/motion'
 import { PRESET_COLORS, PRESET_ICONS } from './constants'
+
+// Match the emoji-mart picker to the Graphite Mono dark surface. These CSS vars
+// inherit into the picker's shadow DOM (custom properties pierce shadow roots).
+const pickerVars = {
+  '--rgb-background': '30 30 34',
+  '--rgb-input': '11 11 13',
+  '--rgb-color': '237 237 240',
+  '--rgb-accent': '139 92 246',
+} as React.CSSProperties
 
 interface Props {
   open: boolean
@@ -20,6 +31,7 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
   const [name, setName] = useState('')
   const [icon, setIcon] = useState(PRESET_ICONS[0])
   const [color, setColor] = useState(PRESET_COLORS[0])
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   // Seed fields when opening.
   useEffect(() => {
@@ -27,6 +39,7 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
     setName(editing?.name ?? '')
     setIcon(editing?.icon ?? PRESET_ICONS[0])
     setColor(editing?.color ?? PRESET_COLORS[0])
+    setPickerOpen(false)
   }, [open, editing])
 
   // Close on Escape.
@@ -64,7 +77,7 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
           />
           <motion.div
             variants={sheet}
-            className="relative w-full max-w-md rounded-t-[28px] border p-6 sm:rounded-[28px]"
+            className="relative max-h-[88vh] w-full max-w-md overflow-y-auto rounded-t-[28px] border p-6 sm:rounded-[28px]"
             style={{ background: 'var(--surface)', borderColor: 'var(--line)', boxShadow: 'var(--shadow)' }}
           >
             <div className="mb-5 flex items-center justify-between">
@@ -103,9 +116,9 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
               />
             </div>
 
-            {/* icon picker */}
+            {/* icon picker — quick presets + full searchable picker */}
             <Label>Icon</Label>
-            <div className="mb-5 grid grid-cols-8 gap-1.5">
+            <div className="mb-2 grid grid-cols-8 gap-1.5">
               {PRESET_ICONS.map((ic) => (
                 <button
                   key={ic}
@@ -113,17 +126,56 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
                   className="grid aspect-square place-items-center rounded-lg text-xl transition-transform hover:scale-110"
                   style={{
                     background: icon === ic ? 'var(--surface-2)' : 'transparent',
-                    boxShadow: icon === ic ? 'inset 0 0 0 1.5px var(--accent)' : 'none',
+                    boxShadow: icon === ic ? `inset 0 0 0 1.5px ${color}` : 'none',
                   }}
                 >
                   {ic}
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setPickerOpen((v) => !v)}
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border py-2 text-sm text-muted transition-colors hover:text-ink"
+              style={{ borderColor: 'var(--line)' }}
+            >
+              <Smile size={15} />
+              {pickerOpen ? 'Close picker' : 'Browse all emojis…'}
+            </button>
+            <AnimatePresence initial={false}>
+              {pickerOpen && (
+                <motion.div
+                  // Fade only — no height/size animation, so emoji-mart measures
+                  // the real container width and lays out full-width (dynamicWidth).
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                  // Force the emoji-mart host element to fill the width; on its
+                  // own it shrinks to content (~188px). dynamicWidth then lays
+                  // out columns to match the real width.
+                  className="mb-5 w-full [&_em-emoji-picker]:!w-full"
+                  style={pickerVars}
+                >
+                  <EmojiPicker
+                    data={emojiData}
+                    onEmojiSelect={(e: { native: string }) => {
+                      setIcon(e.native)
+                      setPickerOpen(false)
+                    }}
+                    theme="dark"
+                    previewPosition="none"
+                    skinTonePosition="search"
+                    navPosition="top"
+                    dynamicWidth
+                    maxFrequentRows={1}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {/* color picker */}
+            {/* color picker — presets + any custom color */}
             <Label>Color</Label>
-            <div className="mb-6 flex flex-wrap gap-2">
+            <div className="mb-6 flex flex-wrap items-center gap-2">
               {PRESET_COLORS.map((c) => (
                 <button
                   key={c}
@@ -133,12 +185,36 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
                   style={{
                     background: c,
                     boxShadow:
-                      color === c
-                        ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent)'
+                      color.toLowerCase() === c.toLowerCase()
+                        ? `0 0 0 2px var(--surface), 0 0 0 4px ${c}`
                         : 'none',
                   }}
                 />
               ))}
+              {/* custom color — native wheel/hex; shows the picked color as its face */}
+              <label
+                className="relative grid h-8 w-8 cursor-pointer place-items-center rounded-full transition-transform hover:scale-110"
+                title="Custom color"
+                style={{
+                  background: isCustom(color)
+                    ? color
+                    : 'conic-gradient(from 0deg, #fb7185, #f59e0b, #4ade80, #38bdf8, #a78bfa, #fb7185)',
+                  boxShadow: isCustom(color)
+                    ? `0 0 0 2px var(--surface), 0 0 0 4px ${color}`
+                    : 'none',
+                }}
+              >
+                <span className="text-[13px] font-bold leading-none text-white mix-blend-difference">
+                  +
+                </span>
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="Custom color"
+                />
+              </label>
             </div>
 
             <button
@@ -155,6 +231,11 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
     </AnimatePresence>,
     document.body,
   )
+}
+
+/** True when the color isn't one of the presets (i.e. a custom-picked hex). */
+function isCustom(color: string): boolean {
+  return !PRESET_COLORS.some((c) => c.toLowerCase() === color.toLowerCase())
 }
 
 function Label({ children }: { children: React.ReactNode }) {
