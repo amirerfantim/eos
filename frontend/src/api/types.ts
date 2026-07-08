@@ -43,3 +43,10 @@ export interface HabitUpdate {
 export interface AppSettings {
   timezone: string
 }
+
+/** Per-day completion tally for the date-timeline rings. */
+export interface DaySummary {
+  date: string // 'YYYY-MM-DD'
+  done: number // habits that met their goal that day
+  total: number // active habit count
+}

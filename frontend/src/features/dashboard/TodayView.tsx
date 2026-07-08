@@ -2,14 +2,15 @@
 // button. Owns the create/edit sheet and per-habit completion bursts.
 
 import { AnimatePresence, Reorder, motion } from 'framer-motion'
-import { Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CornerUpLeft, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Habit, HabitCreate } from '../../api/types'
 import { ThemeToggle } from '../../components/ThemeToggle'
-import { greeting, longDate } from '../../lib/date'
+import { greeting, longDate, parseISO, todayISO } from '../../lib/date'
 import { listContainer } from '../../lib/motion'
 import { ProgressRing } from '../completions/ProgressRing'
 import { AddHabitModal } from '../habits/AddHabitModal'
+import { DateStrip } from './DateStrip'
 import { EmptyState } from '../habits/EmptyState'
 import { HabitCard } from '../habits/HabitCard'
 import { HabitDetailView } from '../habits/HabitDetailView'
@@ -23,11 +24,16 @@ import {
 } from '../habits/queries'
 
 export function TodayView() {
-  const { data: habits, isLoading, isError } = useHabits()
+  // The day currently being viewed/edited. Defaults to today; the date strip
+  // moves it into the past. Everything below reckons against this day.
+  const [selectedDate, setSelectedDate] = useState(todayISO())
+  const isToday = selectedDate === todayISO()
+
+  const { data: habits, isLoading, isError } = useHabits(selectedDate)
   const create = useCreateHabit()
   const update = useUpdateHabit()
   const remove = useDeleteHabit()
-  const { preview, commit } = useSetCount()
+  const { preview, commit } = useSetCount(selectedDate)
   const reorder = useReorderHabits()
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -133,14 +139,32 @@ export function TodayView() {
   }
 
   return (
-    <div className="mx-auto min-h-full w-full max-w-md px-5 pb-32 pt-8">
+    <div className="mx-auto min-h-full w-full max-w-md px-5 pb-48 pt-8">
       {/* header */}
       <header className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="font-display text-3xl leading-tight tracking-tight text-balance">
-            {greeting()}
+            {isToday ? greeting() : parseISO(selectedDate).toLocaleDateString(undefined, { weekday: 'long' })}
           </h1>
-          <div className="nums mt-1 text-sm text-muted">{longDate()}</div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="nums text-sm text-muted">{longDate(parseISO(selectedDate))}</span>
+            <AnimatePresence>
+              {!isToday && (
+                <motion.button
+                  key="jump"
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -6 }}
+                  onClick={() => setSelectedDate(todayISO())}
+                  className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold text-accent"
+                  style={{ borderColor: 'var(--line)' }}
+                >
+                  <CornerUpLeft size={12} strokeWidth={2.5} />
+                  Today
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {total > 0 && <ProgressRing value={progress} />}
@@ -211,12 +235,29 @@ export function TodayView() {
           animate={{ opacity: 1, y: 0 }}
           whileHover={{ y: -2 }}
           whileTap={{ scale: 0.96 }}
-          className="accent-gradient fixed bottom-7 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full px-6 py-3.5 font-semibold"
+          className="accent-gradient fixed bottom-[108px] left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full px-6 py-3.5 font-semibold"
           style={{ color: 'var(--btn-ink)', boxShadow: '0 14px 34px -10px var(--accent)' }}
         >
           <Plus size={18} strokeWidth={2.5} />
           New habit
         </motion.button>
+      )}
+
+      {/* date timeline — docked at the bottom, travels the whole screen in time */}
+      {total > 0 && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-30"
+          style={{
+            borderTop: '1px solid var(--line)',
+            background: 'color-mix(in srgb, var(--surface) 85%, transparent)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+          }}
+        >
+          <div className="mx-auto max-w-md px-2 pb-[max(8px,env(safe-area-inset-bottom))]">
+            <DateStrip selected={selectedDate} onSelect={setSelectedDate} />
+          </div>
+        </div>
       )}
 
       <AddHabitModal
@@ -248,7 +289,7 @@ export function TodayView() {
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0, scale: 0.96 }}
             transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-            className="fixed bottom-24 left-1/2 z-50 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border"
+            className="fixed bottom-[116px] left-1/2 z-50 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border"
             style={{ background: 'var(--surface)', borderColor: 'var(--line)', boxShadow: 'var(--shadow)' }}
           >
             <div className="flex items-center gap-3 px-4 py-3">
