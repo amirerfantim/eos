@@ -56,3 +56,15 @@ class HabitWithStats(HabitBase):
     count_today: int  # progress within the current period (day or week)
     current_streak: int
     best_streak: int
+
+
+class DaySummary(SQLModel):
+    """Per-day completion tally that powers the date-timeline rings.
+
+    `done` = how many habits met their goal on that date; `total` = active
+    habit count. The ring fill is `done / total`.
+    """
+
+    date: dt.date
+    done: int
+    total: int
