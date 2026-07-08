@@ -80,6 +80,11 @@ export function useToggleCompletion() {
     onError: (_e, _habit, ctx) => {
       if (ctx?.prev) qc.setQueryData(habitKeys.all, ctx.prev)
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: habitKeys.all }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: habitKeys.all })
+      // Heatmap in the detail view reads its own completions cache; refresh it
+      // so today's square reflects a toggle made from the home screen.
+      qc.invalidateQueries({ queryKey: ['completions'] })
+    },
   })
 }
