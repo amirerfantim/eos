@@ -3,7 +3,7 @@
 // above every card and flips up/down to stay on-screen.
 
 import { AnimatePresence, motion } from 'framer-motion'
-import { Flame, MoreHorizontal, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { BarChart3, Flame, MoreHorizontal, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Habit } from '../../api/types'
@@ -16,6 +16,7 @@ interface Props {
   onToggle: (habit: Habit) => void
   onEdit: (habit: Habit) => void
   onDelete: (habit: Habit) => void
+  onOpenDetail: (habit: Habit) => void
 }
 
 const MENU_W = 172
@@ -27,7 +28,7 @@ interface MenuPos {
   origin: 'top' | 'bottom'
 }
 
-export function HabitCard({ habit, burst, onToggle, onEdit, onDelete }: Props) {
+export function HabitCard({ habit, burst, onToggle, onEdit, onDelete, onOpenDetail }: Props) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [menu, setMenu] = useState<MenuPos | null>(null)
 
@@ -86,16 +87,21 @@ export function HabitCard({ habit, burst, onToggle, onEdit, onDelete }: Props) {
         }
       }}
     >
-      {/* icon chip */}
-      <div
-        className="grid h-11 w-11 flex-none place-items-center rounded-[13px] text-xl"
+      {/* icon chip — shortcut to details */}
+      <button
+        aria-label={`${habit.name} details`}
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpenDetail(habit)
+        }}
+        className="grid h-11 w-11 flex-none place-items-center rounded-[13px] text-xl transition-transform hover:scale-105"
         style={{
           background: `color-mix(in srgb, ${habit.color} 20%, var(--surface))`,
           boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${habit.color} 32%, transparent)`,
         }}
       >
         {habit.icon}
-      </div>
+      </button>
 
       {/* name + streak */}
       <div className="min-w-0 flex-1">
@@ -179,6 +185,14 @@ export function HabitCard({ habit, burst, onToggle, onEdit, onDelete }: Props) {
                 transition={{ type: 'spring', stiffness: 500, damping: 32 }}
                 onClick={(e) => e.stopPropagation()}
               >
+                <MenuItem
+                  icon={<BarChart3 size={16} />}
+                  label="Details"
+                  onClick={() => {
+                    closeMenu()
+                    onOpenDetail(habit)
+                  }}
+                />
                 <MenuItem
                   icon={<Pencil size={16} />}
                   label="Edit"
