@@ -7,7 +7,7 @@ import { BarChart3, Flame, MoreHorizontal, Pencil, Sparkles, Trash2 } from 'luci
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Habit } from '../../api/types'
-import { listItem } from '../../lib/motion'
+import { reorderItem } from '../../lib/motion'
 import { HabitCheck } from './HabitCheck'
 
 interface Props {
@@ -46,6 +46,9 @@ export function HabitCard({
 }: Props) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [menu, setMenu] = useState<MenuPos | null>(null)
+  // Lifted-while-dragging glow. Driven by React state (not framer's whileDrag)
+  // so a reorder re-render can't leave the box-shadow motion value stuck on.
+  const [dragging, setDragging] = useState(false)
 
   // Long-press → drag. A tap toggles completion, so a drag must be a deliberate
   // hold; the timer arms on pointer-down and fires only if the finger stays put.
@@ -132,20 +135,29 @@ export function HabitCard({
       value={habit.id}
       dragListener={false}
       dragControls={controls}
-      variants={listItem}
-      className="relative flex touch-none select-none items-center gap-3.5 rounded-[20px] border p-3.5 transition-colors"
+      variants={reorderItem}
+      className="relative flex touch-none select-none items-center gap-3.5 rounded-[20px] border p-3.5 transition-[box-shadow,border-color,background-color]"
       style={{
-        cursor: 'grab',
+        cursor: dragging ? 'grabbing' : 'grab',
         background: 'var(--surface-2)',
         borderColor: habit.done_today
           ? 'color-mix(in srgb, var(--accent) 45%, var(--line))'
           : 'var(--line)',
-        boxShadow: habit.done_today ? '0 14px 34px -18px var(--accent)' : 'none',
+        // Glow: while dragging (lifted) > when done > none. CSS-transitioned,
+        // so it fades out the moment `dragging` flips back to false on drop.
+        boxShadow: dragging
+          ? '0 22px 44px -12px var(--accent)'
+          : habit.done_today
+            ? '0 14px 34px -18px var(--accent)'
+            : 'none',
       }}
-      whileHover={{ y: -2 }}
+      // Hover cue uses scale, not `y` — the drag owns the y-axis transform.
+      whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
-      whileDrag={{ scale: 1.03, cursor: 'grabbing', boxShadow: '0 22px 44px -12px var(--accent)' }}
+      whileDrag={{ scale: 1.03 }}
+      onDragStart={() => setDragging(true)}
       onDragEnd={() => {
+        setDragging(false)
         lastDragEnd.current = Date.now()
         onReorderCommit()
       }}

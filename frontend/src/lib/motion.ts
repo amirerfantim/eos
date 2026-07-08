@@ -17,6 +17,15 @@ export const listItem: Variants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.18 } },
 }
 
+// For draggable Reorder items: fade/scale only — NEVER animate `y`, because the
+// drag gesture owns the `y` transform. Animating `y` here fights the drag and
+// leaves a stuck `translateY` after dropping.
+export const reorderItem: Variants = {
+  hidden: { opacity: 0, scale: 0.98 },
+  show: { opacity: 1, scale: 1, transition: softSpring },
+  exit: { opacity: 0, scale: 0.98, transition: { duration: 0.18 } },
+}
+
 // Modal / bottom-sheet.
 export const overlay: Variants = {
   hidden: { opacity: 0 },
