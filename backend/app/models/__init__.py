@@ -28,6 +28,13 @@ class Habit(SQLModel, table=True):
     order: int = Field(default=0, index=True)  # manual sort position
     created_at: dt.datetime = Field(default_factory=dt.datetime.utcnow)
 
+    # Goal: complete the habit `target` times per `period`. target=1/day is the
+    # classic binary "done today". `unit` is a display label for the count
+    # (e.g. "glasses", "minutes"); None renders as "times".
+    target: int = Field(default=1)
+    period: str = Field(default="day")  # "day" | "week"
+    unit: str | None = Field(default=None)
+
     # Deleting a habit removes its completion history (cascade).
     completions: list["Completion"] = Relationship(
         back_populates="habit",
@@ -47,6 +54,7 @@ class Completion(SQLModel, table=True):
     id: str = Field(default_factory=_uuid, primary_key=True)
     habit_id: str = Field(foreign_key="habit.id", index=True)
     date: dt.date = Field(index=True)  # the local calendar day it was completed
+    count: int = Field(default=1)  # times done that day (progress toward target)
 
     habit: Habit = Relationship(back_populates="completions")
 

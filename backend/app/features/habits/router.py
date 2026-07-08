@@ -24,13 +24,16 @@ router = APIRouter(prefix="/habits", tags=["habits"])
 
 
 def _with_stats(
-    habit: Habit, done_dates: set[dt.date], today: dt.date
+    habit: Habit, counts: dict[dt.date, int], today: dt.date
 ) -> HabitWithStats:
-    """Combine a habit row with its computed streak stats."""
-    done_today, current, best = stats.compute_stats(done_dates, today)
+    """Combine a habit row with its computed streak/progress stats."""
+    done_today, count_today, current, best = stats.compute_stats(
+        counts, today, habit.target, habit.period
+    )
     return HabitWithStats(
         **habit.model_dump(),
         done_today=done_today,
+        count_today=count_today,
         current_streak=current,
         best_streak=best,
     )
@@ -47,8 +50,8 @@ async def list_habits(session: SessionDep) -> list[HabitWithStats]:
     """List all habits with their current stats (single query for completions)."""
     today = await _today(session)
     habits = await service.list_habits(session)
-    grouped = await service.all_done_dates(session)
-    return [_with_stats(h, grouped.get(h.id, set()), today) for h in habits]
+    grouped = await service.all_done_counts(session)
+    return [_with_stats(h, grouped.get(h.id, {}), today) for h in habits]
 
 
 @router.post("", response_model=HabitWithStats, status_code=status.HTTP_201_CREATED)
@@ -56,7 +59,7 @@ async def create_habit(payload: HabitCreate, session: SessionDep) -> HabitWithSt
     """Create a new habit (starts with no completions)."""
     today = await _today(session)
     habit = await service.create_habit(session, payload)
-    return _with_stats(habit, set(), today)
+    return _with_stats(habit, {}, today)
 
 
 @router.put("/reorder", response_model=list[HabitWithStats])
@@ -81,8 +84,8 @@ async def update_habit(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Habit not found")
     today = await _today(session)
     updated = await service.update_habit(session, habit, payload)
-    grouped = await service.all_done_dates(session)
-    return _with_stats(updated, grouped.get(habit_id, set()), today)
+    grouped = await service.all_done_counts(session)
+    return _with_stats(updated, grouped.get(habit_id, {}), today)
 
 
 @router.delete("/{habit_id}", status_code=status.HTTP_204_NO_CONTENT)

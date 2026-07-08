@@ -43,11 +43,12 @@ export const api = {
   reorderHabits: (ids: string[]) =>
     request<Habit[]>('/habits/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
 
-  markCompletion: (habitId: string, date: string) =>
-    request<void>(`/habits/${habitId}/completions/${date}`, { method: 'PUT' }),
-
-  unmarkCompletion: (habitId: string, date: string) =>
-    request<void>(`/habits/${habitId}/completions/${date}`, { method: 'DELETE' }),
+  /** Set a day's progress count (0 clears the day). */
+  setCompletion: (habitId: string, date: string, count: number) =>
+    request<void>(`/habits/${habitId}/completions/${date}`, {
+      method: 'PUT',
+      body: JSON.stringify({ count }),
+    }),
 
   listCompletions: (habitId: string, from?: string, to?: string) => {
     const q = new URLSearchParams()
