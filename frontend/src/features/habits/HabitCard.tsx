@@ -3,15 +3,18 @@
 // a foreground layer that slides on the x-axis over the actions behind it.
 
 import { Reorder, animate, motion, useDragControls, useMotionValue, useTransform } from 'framer-motion'
-import { BarChart3, Flame, Minus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { BarChart3, Flame, History, Minus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import type { Habit } from '../../api/types'
+import { dateOnly } from '../../lib/date'
 import { reorderItem } from '../../lib/motion'
 import { HabitCheck } from './HabitCheck'
 import { LiquidProgress } from './LiquidProgress'
 
 interface Props {
   habit: Habit
+  /** the day this card is being shown for ('YYYY-MM-DD') */
+  selectedDate: string
   burst: number
   /** Instantly reflect a new count in the UI (cache-only, no request). */
   onPreview: (habitId: string, count: number) => void
@@ -37,6 +40,7 @@ const snap = { type: 'spring', stiffness: 520, damping: 42 } as const
 
 export function HabitCard({
   habit,
+  selectedDate,
   burst,
   onPreview,
   onCommit,
@@ -49,6 +53,10 @@ export function HabitCard({
   // the classic binary check that toggles done/undone.
   const counted = habit.target > 1
   const atMax = habit.count_today >= habit.target
+  // Shown as a ghost on days before the habit began, so it can still be
+  // backfilled — logging progress here moves the habit's start date back to
+  // `selectedDate` (see completions.set_count) and it becomes a normal card.
+  const notStarted = dateOnly(habit.created_at) > selectedDate
 
   // Running count during an interaction (a tap, or a long-press auto-repeat).
   // Re-synced to the live value at the start of each gesture; ticks advance it
@@ -272,10 +280,15 @@ export function HabitCard({
         style={{
           cursor: dragging ? 'grabbing' : 'grab',
           background: 'var(--surface-2)',
-          borderColor: habit.done_today
-            ? `color-mix(in srgb, ${habit.color} 55%, var(--line))`
-            : 'var(--line)',
+          borderColor: notStarted
+            ? 'color-mix(in srgb, var(--ink-muted) 45%, transparent)'
+            : habit.done_today
+              ? `color-mix(in srgb, ${habit.color} 55%, var(--line))`
+              : 'var(--line)',
+          borderStyle: notStarted ? 'dashed' : 'solid',
         }}
+        animate={{ opacity: notStarted ? 0.62 : 1 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
         className="relative z-10 flex touch-none select-none items-center gap-3.5 overflow-hidden rounded-[20px] border p-3.5 transition-[border-color,background-color]"
         onClick={handleSurfaceClick}
         role="button"
@@ -309,21 +322,33 @@ export function HabitCard({
           </>
         )}
 
-        {/* icon chip — shortcut to details */}
-        <button
-          aria-label={`${habit.name} details`}
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenDetail(habit)
-          }}
-          className="relative z-10 grid h-11 w-11 flex-none place-items-center rounded-[13px] text-xl transition-transform hover:scale-105"
-          style={{
-            background: `color-mix(in srgb, ${habit.color} 20%, var(--surface))`,
-            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${habit.color} 32%, transparent)`,
-          }}
-        >
-          {habit.icon}
-        </button>
+        {/* icon chip — shortcut to details; pulses gently when not-yet-started to
+            invite a tap that backfills it into this day */}
+        <div className="relative z-10 h-11 w-11 flex-none">
+          {notStarted && (
+            <motion.span
+              aria-hidden
+              className="absolute inset-0 rounded-[13px]"
+              style={{ background: habit.color, filter: 'blur(7px)' }}
+              animate={{ opacity: [0.15, 0.5, 0.15], scale: [1, 1.15, 1] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          )}
+          <button
+            aria-label={`${habit.name} details`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenDetail(habit)
+            }}
+            className="relative grid h-11 w-11 place-items-center rounded-[13px] text-xl transition-transform hover:scale-105"
+            style={{
+              background: `color-mix(in srgb, ${habit.color} 20%, var(--surface))`,
+              boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${habit.color} 32%, transparent)`,
+            }}
+          >
+            {habit.icon}
+          </button>
+        </div>
 
         {/* name + streak */}
         <div
@@ -332,7 +357,12 @@ export function HabitCard({
         >
           <div className="truncate font-semibold tracking-tight">{habit.name}</div>
           <div className="nums mt-0.5 flex items-center gap-1.5 text-[0.78rem] text-muted">
-            {habit.current_streak > 0 ? (
+            {notStarted ? (
+              <>
+                <History size={13} />
+                <span className="truncate">tap to start here</span>
+              </>
+            ) : habit.current_streak > 0 ? (
               <>
                 <Flame size={13} style={{ color: habit.color }} />
                 <span>
