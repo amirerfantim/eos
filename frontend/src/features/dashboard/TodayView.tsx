@@ -12,6 +12,7 @@ import { ProgressRing } from '../completions/ProgressRing'
 import { AddHabitModal } from '../habits/AddHabitModal'
 import { EmptyState } from '../habits/EmptyState'
 import { HabitCard } from '../habits/HabitCard'
+import { HabitDetailView } from '../habits/HabitDetailView'
 import {
   useCreateHabit,
   useDeleteHabit,
@@ -29,7 +30,11 @@ export function TodayView() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Habit | null>(null)
+  const [detail, setDetail] = useState<Habit | null>(null)
   const [bursts, setBursts] = useState<Record<string, number>>({})
+
+  // Keep the open detail view in sync with fresh habit data (streaks update).
+  const detailHabit = detail ? (habits?.find((h) => h.id === detail.id) ?? null) : null
 
   const doneCount = habits?.filter((h) => h.done_today).length ?? 0
   const total = habits?.length ?? 0
@@ -120,6 +125,7 @@ export function TodayView() {
                   onToggle={handleToggle}
                   onEdit={openEdit}
                   onDelete={(h) => remove.mutate(h.id)}
+                  onOpenDetail={setDetail}
                 />
               ))}
             </AnimatePresence>
@@ -148,6 +154,19 @@ export function TodayView() {
         editing={editing}
         onClose={() => setModalOpen(false)}
         onSubmit={handleSubmit}
+      />
+
+      <HabitDetailView
+        habit={detailHabit}
+        onClose={() => setDetail(null)}
+        onEdit={(h) => {
+          setDetail(null)
+          openEdit(h)
+        }}
+        onDelete={(h) => {
+          setDetail(null)
+          remove.mutate(h.id)
+        }}
       />
     </div>
   )

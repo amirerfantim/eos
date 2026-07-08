@@ -28,3 +28,26 @@ export function greeting(d: Date = new Date()): string {
 export function longDate(d: Date = new Date()): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
 }
+
+export function addDays(d: Date, n: number): Date {
+  const r = new Date(d)
+  r.setDate(r.getDate() + n)
+  return r
+}
+
+/** Start of the week (Sunday) for the given date, at local midnight. */
+export function startOfWeek(d: Date): Date {
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  r.setDate(r.getDate() - r.getDay()) // getDay: 0=Sun
+  return r
+}
+
+/** Parse a 'YYYY-MM-DD' string as a local Date (no UTC shift). */
+export function parseISO(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export function prettyDate(d: Date): string {
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+}
