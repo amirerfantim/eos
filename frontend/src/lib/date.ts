@@ -12,6 +12,11 @@ export function todayISO(): string {
   return isoDate(new Date())
 }
 
+/** Extract the 'YYYY-MM-DD' date portion from an ISO datetime string. */
+export function dateOnly(iso: string): string {
+  return iso.slice(0, 10)
+}
+
 export function getBrowserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 }

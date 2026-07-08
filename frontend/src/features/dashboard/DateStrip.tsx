@@ -12,6 +12,9 @@ const WEEK = 7
 const INITIAL_WEEKS = 4 // days visible before any lazy load
 const LOAD_STEP_WEEKS = 4 // how many more weeks each lazy load pulls in
 const LOAD_THRESHOLD_PX = 56 // scroll-left distance that triggers a load
+// Stay comfortably under the backend's 400-day summary cap so the range request
+// never 400s (which would blank every ring). ~1 year back is plenty of history.
+const MAX_BACK_DAYS = 365
 
 interface Props {
   /** currently viewed day, 'YYYY-MM-DD' */
@@ -69,8 +72,12 @@ export function DateStrip({ selected, onSelect }: Props) {
     const el = scRef.current
     if (!el) return
     if (el.scrollLeft < LOAD_THRESHOLD_PX && anchorFromRight.current == null) {
+      const floor = isoDate(addDays(parseISO(today), -MAX_BACK_DAYS))
+      const proposed = isoDate(addDays(parseISO(start), -(LOAD_STEP_WEEKS * WEEK)))
+      const next = proposed < floor ? floor : proposed
+      if (next === start) return // already at the earliest day we'll load
       anchorFromRight.current = el.scrollWidth - el.scrollLeft
-      setStart((s) => isoDate(addDays(parseISO(s), -(LOAD_STEP_WEEKS * WEEK))))
+      setStart(next)
     }
   }
 
