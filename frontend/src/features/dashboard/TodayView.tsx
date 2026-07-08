@@ -2,8 +2,8 @@
 // button. Owns the create/edit sheet and per-habit completion bursts.
 
 import { AnimatePresence, Reorder, motion } from 'framer-motion'
-import { Plus } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Habit, HabitCreate } from '../../api/types'
 import { ThemeToggle } from '../../components/ThemeToggle'
 import { greeting, longDate } from '../../lib/date'
@@ -35,12 +35,44 @@ export function TodayView() {
   const [detail, setDetail] = useState<Habit | null>(null)
   const [bursts, setBursts] = useState<Record<string, number>>({})
 
+  // Delete is deferred: the card hides immediately and a toast offers Undo. The
+  // real server delete only fires when the toast's timer expires.
+  const [pendingDelete, setPendingDelete] = useState<Habit | null>(null)
+  const deleteTimer = useRef<number | null>(null)
+
+  const requestDelete = useCallback(
+    (habit: Habit) => {
+      // If a delete is already pending, commit it now before queuing the next.
+      if (deleteTimer.current !== null) {
+        clearTimeout(deleteTimer.current)
+        setPendingDelete((prev) => {
+          if (prev) remove.mutate(prev.id)
+          return null
+        })
+      }
+      setPendingDelete(habit)
+      deleteTimer.current = window.setTimeout(() => {
+        remove.mutate(habit.id)
+        deleteTimer.current = null
+        setPendingDelete(null)
+      }, 4500)
+    },
+    [remove],
+  )
+
+  const undoDelete = useCallback(() => {
+    if (deleteTimer.current !== null) clearTimeout(deleteTimer.current)
+    deleteTimer.current = null
+    setPendingDelete(null)
+  }, [])
+
+  // Don't let a queued delete fire after the view unmounts.
+  useEffect(() => () => {
+    if (deleteTimer.current !== null) clearTimeout(deleteTimer.current)
+  }, [])
+
   // Keep the open detail view in sync with fresh habit data (streaks update).
   const detailHabit = detail ? (habits?.find((h) => h.id === detail.id) ?? null) : null
-
-  const doneCount = habits?.filter((h) => h.done_today).length ?? 0
-  const total = habits?.length ?? 0
-  const progress = total > 0 ? doneCount / total : 0
 
   // Drag-reorder is driven by a local id list so a drag reads instantly. It
   // resets to the server order only when the *set* of habits changes (add /
@@ -60,9 +92,15 @@ export function TodayView() {
     () =>
       orderIds
         .map((id) => habits?.find((h) => h.id === id))
-        .filter((h): h is Habit => Boolean(h)),
-    [orderIds, habits],
+        .filter((h): h is Habit => Boolean(h))
+        // Hide a habit that's mid-undo so it appears gone until the toast lapses.
+        .filter((h) => h.id !== pendingDelete?.id),
+    [orderIds, habits, pendingDelete],
   )
+
+  const doneCount = orderedHabits.filter((h) => h.done_today).length
+  const total = orderedHabits.length
+  const progress = total > 0 ? doneCount / total : 0
 
   // Persist on drop; a ref keeps the callback reading the latest order.
   const orderRef = useRef<string[]>([])
@@ -152,7 +190,7 @@ export function TodayView() {
                   burst={bursts[habit.id] ?? 0}
                   onToggle={handleToggle}
                   onEdit={openEdit}
-                  onDelete={(h) => remove.mutate(h.id)}
+                  onDelete={requestDelete}
                   onOpenDetail={setDetail}
                   onReorderCommit={commitOrder}
                 />
@@ -194,9 +232,50 @@ export function TodayView() {
         }}
         onDelete={(h) => {
           setDetail(null)
-          remove.mutate(h.id)
+          requestDelete(h)
         }}
       />
+
+      {/* undo toast — appears after a delete, restores the habit if tapped */}
+      <AnimatePresence>
+        {pendingDelete && (
+          <motion.div
+            key={pendingDelete.id}
+            initial={{ y: 24, opacity: 0, scale: 0.96 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 24, opacity: 0, scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            className="fixed bottom-24 left-1/2 z-50 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border"
+            style={{ background: 'var(--surface)', borderColor: 'var(--line)', boxShadow: 'var(--shadow)' }}
+          >
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span
+                className="grid h-8 w-8 flex-none place-items-center rounded-full"
+                style={{ background: 'color-mix(in srgb, #fb7185 20%, var(--surface))', color: '#fb7185' }}
+              >
+                <Trash2 size={15} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm">
+                Deleted <b className="font-semibold">{pendingDelete.name}</b>
+              </span>
+              <button
+                onClick={undoDelete}
+                className="flex flex-none items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-accent transition-colors hover:bg-line/60"
+              >
+                <RotateCcw size={14} />
+                Undo
+              </button>
+            </div>
+            {/* countdown bar — empties over the undo window */}
+            <motion.span
+              className="block h-0.5 accent-gradient"
+              initial={{ width: '100%' }}
+              animate={{ width: '0%' }}
+              transition={{ duration: 4.5, ease: 'linear' }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
