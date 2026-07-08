@@ -34,8 +34,9 @@ Decided free stack: **Cloudflare Pages** (frontend) + **Render** (backend) + **N
 **v1 done + verified in browser.** Full stack runs in Docker:
 - Backend: habits/completions/settings, streaks, health/ready, Alembic migrations.
 - Frontend: Today view — create/edit/delete habits, tap-to-complete (optimistic + spark/ring animation), streaks, day-progress ring, dark/light theme, PWA. Graphite Mono design.
-Verified: create → complete → streak → theme → persistence all work against the live API.
-Next candidates: habit detail + contribution heatmap, reorder, reminders, cloud deploy. Current truth = git log + `docs/api.md`.
+- Habit detail: slide-up view with streak/total/month stats + GitHub-style contribution heatmap; tap past days to backfill (optimistic).
+Verified in browser: create → complete → streak → detail/heatmap backfill → theme → persistence all work against the live API.
+Next candidates: reorder (drag), reminders/notifications, cloud deploy (see `docs/deploy.md`). Current truth = git log + `docs/api.md`.
 
 ## Frontend notes
 - Feature-modular under `src/features/{habits,completions,dashboard,settings}`; shared `src/lib` (theme, motion, date), `src/api` (typed client + OpenAPI-generated types).
