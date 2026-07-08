@@ -3,16 +3,20 @@
 // a foreground layer that slides on the x-axis over the actions behind it.
 
 import { Reorder, animate, motion, useDragControls, useMotionValue, useTransform } from 'framer-motion'
-import { BarChart3, Flame, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { BarChart3, Flame, Minus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import type { Habit } from '../../api/types'
 import { reorderItem } from '../../lib/motion'
 import { HabitCheck } from './HabitCheck'
+import { LiquidProgress } from './LiquidProgress'
 
 interface Props {
   habit: Habit
   burst: number
-  onToggle: (habit: Habit) => void
+  /** Instantly reflect a new count in the UI (cache-only, no request). */
+  onPreview: (habitId: string, count: number) => void
+  /** Persist the final count once an interaction ends. */
+  onCommit: (habit: Habit, count: number) => void
   onEdit: (habit: Habit) => void
   onDelete: (habit: Habit) => void
   onOpenDetail: (habit: Habit) => void
@@ -34,12 +38,33 @@ const snap = { type: 'spring', stiffness: 520, damping: 42 } as const
 export function HabitCard({
   habit,
   burst,
-  onToggle,
+  onPreview,
+  onCommit,
   onEdit,
   onDelete,
   onOpenDetail,
   onReorderCommit,
 }: Props) {
+  // Counted goals (target > 1) show a liquid fill + stepper; target = 1 keeps
+  // the classic binary check that toggles done/undone.
+  const counted = habit.target > 1
+  const atMax = habit.count_today >= habit.target
+
+  // Running count during an interaction (a tap, or a long-press auto-repeat).
+  // Re-synced to the live value at the start of each gesture; ticks advance it
+  // locally so a rapid hold counts up correctly without waiting on the server.
+  const pending = useRef(habit.count_today)
+  const step = useCallback(
+    (dir: number) => {
+      const next = Math.min(habit.target, Math.max(0, pending.current + dir))
+      if (next === pending.current) return false // hit a bound — stop repeating
+      pending.current = next
+      onPreview(habit.id, next)
+      return true
+    },
+    [habit.id, habit.target, onPreview],
+  )
+  const commitPending = useCallback(() => onCommit(habit, pending.current), [habit, onCommit])
   // Lifted-while-dragging glow. Driven by React state (not framer's whileDrag)
   // so a reorder re-render can't leave the box-shadow motion value stuck on.
   const [dragging, setDragging] = useState(false)
@@ -141,13 +166,32 @@ export function HabitCard({
   // A gesture ends with a synthetic click; swallow the toggle right after one.
   const wasDrag = () => Date.now() - lastDragEnd.current < 250
 
+  // A body tap adds one toward the goal (or toggles a binary habit).
+  const bump = () => {
+    if (counted) {
+      pending.current = habit.count_today
+      if (step(1)) commitPending()
+    } else {
+      const next = habit.done_today ? 0 : 1
+      onPreview(habit.id, next)
+      onCommit(habit, next)
+    }
+  }
+
+  // Begin a stepper press: resync to the live count, then hand ticks to StepBtn.
+  const beginStep = (dir: number) => {
+    pending.current = habit.count_today
+    return step(dir)
+  }
+
   const handleSurfaceClick = () => {
     if (wasDrag()) return
     if (open) {
       closeDrawer() // first tap on an open card just closes the drawer
       return
     }
-    onToggle(habit)
+    if (counted && atMax) return // full — use the − to go back down
+    bump()
   }
 
   return (
@@ -232,7 +276,7 @@ export function HabitCard({
             ? `color-mix(in srgb, ${habit.color} 55%, var(--line))`
             : 'var(--line)',
         }}
-        className="relative z-10 flex touch-none select-none items-center gap-3.5 rounded-[20px] border p-3.5 transition-[border-color,background-color]"
+        className="relative z-10 flex touch-none select-none items-center gap-3.5 overflow-hidden rounded-[20px] border p-3.5 transition-[border-color,background-color]"
         onClick={handleSurfaceClick}
         role="button"
         aria-pressed={habit.done_today}
@@ -240,10 +284,31 @@ export function HabitCard({
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            onToggle(habit)
+            bump()
           }
         }}
       >
+        {/* liquid fill — rises bottom→top toward the goal (counted habits only) */}
+        {counted && habit.count_today > 0 && (
+          <>
+            <LiquidProgress
+              pct={habit.count_today / habit.target}
+              color={habit.color}
+              done={habit.done_today}
+            />
+            {/* legibility scrim — darkens under the text zones (left + right) so
+                the icon/name/number read cleanly, while the water stays bright in
+                the middle. Sits between the water (z-0) and the content (z-10). */}
+            <div
+              className="pointer-events-none absolute inset-0 z-[1]"
+              style={{
+                background:
+                  'linear-gradient(90deg, rgba(9,9,11,0.58) 0%, rgba(9,9,11,0.14) 24%, rgba(9,9,11,0.10) 60%, rgba(9,9,11,0.62) 100%)',
+              }}
+            />
+          </>
+        )}
+
         {/* icon chip — shortcut to details */}
         <button
           aria-label={`${habit.name} details`}
@@ -251,7 +316,7 @@ export function HabitCard({
             e.stopPropagation()
             onOpenDetail(habit)
           }}
-          className="grid h-11 w-11 flex-none place-items-center rounded-[13px] text-xl transition-transform hover:scale-105"
+          className="relative z-10 grid h-11 w-11 flex-none place-items-center rounded-[13px] text-xl transition-transform hover:scale-105"
           style={{
             background: `color-mix(in srgb, ${habit.color} 20%, var(--surface))`,
             boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${habit.color} 32%, transparent)`,
@@ -261,7 +326,10 @@ export function HabitCard({
         </button>
 
         {/* name + streak */}
-        <div className="min-w-0 flex-1">
+        <div
+          className="relative z-10 min-w-0 flex-1"
+          style={counted ? { textShadow: '0 1px 3px rgba(0,0,0,0.6)' } : undefined}
+        >
           <div className="truncate font-semibold tracking-tight">{habit.name}</div>
           <div className="nums mt-0.5 flex items-center gap-1.5 text-[0.78rem] text-muted">
             {habit.current_streak > 0 ? (
@@ -283,17 +351,136 @@ export function HabitCard({
           </div>
         </div>
 
-        {/* check */}
-        <div onClick={(e) => e.stopPropagation()} className="flex-none">
-          <button
-            aria-label={habit.done_today ? 'Mark not done' : 'Mark done'}
-            onClick={() => onToggle(habit)}
-          >
-            <HabitCheck done={habit.done_today} burst={burst} color={habit.color} />
-          </button>
-        </div>
+        {/* completion control */}
+        {counted ? (
+          <div onClick={(e) => e.stopPropagation()} className="relative z-10 flex flex-none items-center gap-1.5">
+            <StepBtn
+              aria-label="One less"
+              disabled={habit.count_today <= 0}
+              color={habit.color}
+              onStep={(first) => (first ? beginStep(-1) : step(-1))}
+              onRelease={commitPending}
+            >
+              <Minus size={15} />
+            </StepBtn>
+            <div
+              className="nums min-w-[3.2rem] text-center text-sm font-semibold tabular-nums"
+              style={{
+                color: habit.done_today ? habit.color : 'var(--ink)',
+                textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+              }}
+            >
+              {habit.count_today}
+              <span className="text-muted">/{habit.target}</span>
+            </div>
+            <StepBtn
+              aria-label="One more"
+              disabled={atMax}
+              color={habit.color}
+              filled
+              onStep={(first) => (first ? beginStep(1) : step(1))}
+              onRelease={commitPending}
+            >
+              <Plus size={15} />
+            </StepBtn>
+          </div>
+        ) : (
+          <div onClick={(e) => e.stopPropagation()} className="relative z-10 flex-none">
+            <button
+              aria-label={habit.done_today ? 'Mark not done' : 'Mark done'}
+              onClick={bump}
+            >
+              <HabitCheck done={habit.done_today} burst={burst} color={habit.color} />
+            </button>
+          </div>
+        )}
       </motion.div>
     </Reorder.Item>
+  )
+}
+
+// Hold-to-repeat timing: first repeat after a short pause, then accelerating.
+const HOLD_START_MS = 300
+const HOLD_MIN_MS = 55
+const HOLD_ACCEL = 0.8
+
+/** A round +/− stepper. A tap steps once; pressing and holding auto-repeats,
+ *  speeding up — so a goal of 20 is a hold, not twenty taps. */
+function StepBtn({
+  children,
+  color,
+  filled,
+  disabled,
+  onStep,
+  onRelease,
+  'aria-label': ariaLabel,
+}: {
+  children: React.ReactNode
+  color: string
+  filled?: boolean
+  disabled?: boolean
+  /** Apply one step; `first` marks the initial press. Returns false at a bound. */
+  onStep: (first: boolean) => boolean
+  /** Called once when the press ends — persist the settled value. */
+  onRelease: () => void
+  'aria-label': string
+}) {
+  const timer = useRef<number | undefined>(undefined)
+  const delay = useRef(HOLD_START_MS)
+  const active = useRef(false)
+
+  const stop = useCallback(() => {
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current)
+      timer.current = undefined
+    }
+    if (active.current) {
+      active.current = false
+      onRelease()
+    }
+  }, [onRelease])
+
+  const begin = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation() // don't trip the card's long-press/swipe handlers
+      if (disabled) return
+      active.current = true
+      delay.current = HOLD_START_MS
+      if (!onStep(true)) return // already at a bound; release still commits
+      const tick = () => {
+        if (!onStep(false)) {
+          if (timer.current !== undefined) clearTimeout(timer.current)
+          timer.current = undefined
+          return
+        }
+        delay.current = Math.max(HOLD_MIN_MS, delay.current * HOLD_ACCEL)
+        timer.current = window.setTimeout(tick, delay.current)
+      }
+      timer.current = window.setTimeout(tick, delay.current)
+    },
+    [disabled, onStep],
+  )
+
+  return (
+    <motion.button
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onPointerDown={begin}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onContextMenu={(e) => e.preventDefault()}
+      whileTap={{ scale: 0.86 }}
+      className="grid h-8 w-8 touch-none select-none place-items-center rounded-full transition-opacity disabled:opacity-30"
+      style={{
+        color: filled ? 'var(--btn-ink)' : color,
+        background: filled ? color : `color-mix(in srgb, ${color} 16%, var(--surface))`,
+        boxShadow: filled ? `0 6px 16px -6px ${color}` : `inset 0 0 0 1px color-mix(in srgb, ${color} 34%, transparent)`,
+      }}
+    >
+      {children}
+    </motion.button>
   )
 }
 
