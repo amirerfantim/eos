@@ -63,6 +63,10 @@ async def list_habits(
     reference = on or await _today(session)
     habits = await service.list_habits(session)
     grouped = await service.all_done_counts(session)
+    # Every habit is shown on every day so the user can backfill a habit into a
+    # past day (which moves its start date back — see completions.set_count).
+    # Whether a habit *counts* toward a day's rate is decided by the client and
+    # the summary endpoint, both using each habit's start date.
     return [_with_stats(h, grouped.get(h.id, {}), reference) for h in habits]
 
 
@@ -91,17 +95,20 @@ async def day_summaries(
 
     habits = await service.list_habits(session)
     grouped = await service.all_done_counts(session)
-    total = len(habits)
 
     out: list[DaySummary] = []
     day = from_
     while day <= to:
+        # Only habits that already existed on `day` count toward its ring, so a
+        # historical day's total reflects the habits that existed then — not
+        # today's (larger) set.
+        existing = [h for h in habits if h.created_at.date() <= day]
         done = sum(
             1
-            for h in habits
+            for h in existing
             if stats.compute_stats(grouped.get(h.id, {}), day, h.target, h.period)[0]
         )
-        out.append(DaySummary(date=day, done=done, total=total))
+        out.append(DaySummary(date=day, done=done, total=len(existing)))
         day += dt.timedelta(days=1)
     return out
 

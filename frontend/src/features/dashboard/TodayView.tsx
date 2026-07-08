@@ -6,7 +6,7 @@ import { CornerUpLeft, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Habit, HabitCreate } from '../../api/types'
 import { ThemeToggle } from '../../components/ThemeToggle'
-import { greeting, longDate, parseISO, todayISO } from '../../lib/date'
+import { dateOnly, greeting, longDate, parseISO, todayISO } from '../../lib/date'
 import { listContainer } from '../../lib/motion'
 import { ProgressRing } from '../completions/ProgressRing'
 import { AddHabitModal } from '../habits/AddHabitModal'
@@ -104,9 +104,17 @@ export function TodayView() {
     [orderIds, habits, pendingDelete],
   )
 
-  const doneCount = orderedHabits.filter((h) => h.done_today).length
   const total = orderedHabits.length
-  const progress = total > 0 ? doneCount / total : 0
+  // Only habits that had already started by the viewed day count toward its
+  // ring/percentage — a habit still shows in the list (for backfill) before
+  // that, it just doesn't drag the day's rate down.
+  const startedHabits = useMemo(
+    () => orderedHabits.filter((h) => dateOnly(h.created_at) <= selectedDate),
+    [orderedHabits, selectedDate],
+  )
+  const doneCount = startedHabits.filter((h) => h.done_today).length
+  const activeTotal = startedHabits.length
+  const progress = activeTotal > 0 ? doneCount / activeTotal : 0
 
   // Persist on drop; a ref keeps the callback reading the latest order.
   const orderRef = useRef<string[]>([])
@@ -167,16 +175,16 @@ export function TodayView() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {total > 0 && <ProgressRing value={progress} />}
+          {activeTotal > 0 && <ProgressRing value={progress} />}
           <ThemeToggle />
         </div>
       </header>
 
       {/* day summary */}
-      {total > 0 && (
+      {activeTotal > 0 && (
         <div className="mt-6 flex items-center gap-3 text-sm text-muted">
           <span className="nums">
-            <b className="text-ink">{doneCount}</b> of <b className="text-ink">{total}</b> lit today
+            <b className="text-ink">{doneCount}</b> of <b className="text-ink">{activeTotal}</b> lit today
           </span>
           <span className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--line)' }}>
             <motion.span
@@ -213,6 +221,7 @@ export function TodayView() {
                 <HabitCard
                   key={habit.id}
                   habit={habit}
+                  selectedDate={selectedDate}
                   burst={bursts[habit.id] ?? 0}
                   onPreview={preview}
                   onCommit={handleCommit}
