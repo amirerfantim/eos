@@ -1,4 +1,4 @@
-"""Business logic for habit completions (marking days done/undone)."""
+"""Business logic for habit completions (progress toward a day's goal)."""
 
 import datetime as dt
 
@@ -9,27 +9,51 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Completion
 
 
-async def mark(session: AsyncSession, habit_id: str, day: dt.date) -> None:
-    """Mark a habit done for a day. Idempotent — repeat calls are no-ops.
+async def set_count(
+    session: AsyncSession, habit_id: str, day: dt.date, count: int
+) -> int:
+    """Set how many times a habit was done on `day` (absolute, idempotent).
 
-    Relies on the (habit_id, date) unique constraint: if a concurrent request
-    inserts first, the IntegrityError is swallowed so the end state is the same.
+    count <= 0 removes the row entirely (a day with no progress). Returns the
+    stored count (0 if the row was removed). Relies on the (habit_id, date)
+    unique constraint to stay a single row per day under concurrent writes.
     """
-    session.add(Completion(habit_id=habit_id, date=day))
-    try:
+    if count <= 0:
+        await session.execute(
+            delete(Completion).where(
+                and_(Completion.habit_id == habit_id, Completion.date == day)
+            )
+        )
         await session.commit()
-    except IntegrityError:
-        await session.rollback()  # already marked — that's fine
+        return 0
 
-
-async def unmark(session: AsyncSession, habit_id: str, day: dt.date) -> None:
-    """Remove a habit's completion for a day. No-op if it wasn't marked."""
-    await session.execute(
-        delete(Completion).where(
+    existing = await session.scalar(
+        select(Completion).where(
             and_(Completion.habit_id == habit_id, Completion.date == day)
         )
     )
-    await session.commit()
+    if existing is not None:
+        existing.count = count
+        session.add(existing)
+        await session.commit()
+        return count
+
+    session.add(Completion(habit_id=habit_id, date=day, count=count))
+    try:
+        await session.commit()
+    except IntegrityError:
+        # A concurrent request inserted first — apply our count on top.
+        await session.rollback()
+        row = await session.scalar(
+            select(Completion).where(
+                and_(Completion.habit_id == habit_id, Completion.date == day)
+            )
+        )
+        if row is not None:
+            row.count = count
+            session.add(row)
+            await session.commit()
+    return count
 
 
 async def list_dates(
@@ -38,7 +62,7 @@ async def list_dates(
     date_from: dt.date | None = None,
     date_to: dt.date | None = None,
 ) -> list[dt.date]:
-    """Return completed dates for a habit, optionally bounded by [from, to]."""
+    """Return dates a habit had any progress (for the contribution heatmap)."""
     query = select(Completion.date).where(Completion.habit_id == habit_id)
     if date_from is not None:
         query = query.where(Completion.date >= date_from)

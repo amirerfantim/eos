@@ -8,12 +8,19 @@ automatically and returns 422 on malformed input.
 import datetime as dt
 
 from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from app.common.deps import SessionDep
 from app.features.completions import service
 from app.features.habits import service as habits_service
 
 router = APIRouter(prefix="/habits/{habit_id}/completions", tags=["completions"])
+
+
+class CompletionCount(BaseModel):
+    """How many times the habit was done on the target day (0 clears the day)."""
+
+    count: int = Field(ge=0, le=999)
 
 
 async def _ensure_habit(session: SessionDep, habit_id: str) -> None:
@@ -35,16 +42,9 @@ async def list_completions(
 
 
 @router.put("/{day}", status_code=status.HTTP_204_NO_CONTENT)
-async def mark_completion(habit_id: str, day: dt.date, session: SessionDep) -> None:
-    """Mark the habit done for `day` (idempotent)."""
-    await _ensure_habit(session, habit_id)
-    await service.mark(session, habit_id, day)
-
-
-@router.delete("/{day}", status_code=status.HTTP_204_NO_CONTENT)
-async def unmark_completion(
-    habit_id: str, day: dt.date, session: SessionDep
+async def set_completion(
+    habit_id: str, day: dt.date, payload: CompletionCount, session: SessionDep
 ) -> None:
-    """Unmark the habit for `day`."""
+    """Set the habit's progress count for `day` (0 clears it). Idempotent."""
     await _ensure_habit(session, habit_id)
-    await service.unmark(session, habit_id, day)
+    await service.set_count(session, habit_id, day, payload.count)

@@ -10,3 +10,9 @@ export const PRESET_ICONS = [
   '💧', '📖', '🏃', '🧘', '🌙', '🥗', '💪', '🧠',
   '✍️', '🎯', '☀️', '🎧', '💤', '🧹', '💰', '🚿',
 ]
+
+/** Human goal label, e.g. "8 glasses per day" / "3 × per week". */
+export function formatGoal(target: number, period: 'day' | 'week', unit: string | null): string {
+  const noun = unit?.trim() || '×'
+  return `${target} ${noun} per ${period}`
+}

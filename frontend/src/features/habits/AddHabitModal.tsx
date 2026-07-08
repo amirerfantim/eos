@@ -6,9 +6,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Smile, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Habit, HabitCreate } from '../../api/types'
+import type { GoalPeriod, Habit, HabitCreate } from '../../api/types'
+import { WheelPicker } from '../../components/WheelPicker'
 import { overlay, sheet } from '../../lib/motion'
-import { PRESET_COLORS, PRESET_ICONS } from './constants'
+import { PRESET_COLORS, PRESET_ICONS, formatGoal } from './constants'
+
+// Goal amounts offered on the wheel.
+const TARGET_VALUES = Array.from({ length: 99 }, (_, i) => i + 1)
 
 // Match the emoji-mart picker to the Graphite Mono dark surface. These CSS vars
 // inherit into the picker's shadow DOM (custom properties pierce shadow roots).
@@ -31,6 +35,9 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
   const [name, setName] = useState('')
   const [icon, setIcon] = useState(PRESET_ICONS[0])
   const [color, setColor] = useState(PRESET_COLORS[0])
+  const [target, setTarget] = useState(1)
+  const [period, setPeriod] = useState<GoalPeriod>('day')
+  const [unit, setUnit] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
 
   // Seed fields when opening.
@@ -39,6 +46,9 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
     setName(editing?.name ?? '')
     setIcon(editing?.icon ?? PRESET_ICONS[0])
     setColor(editing?.color ?? PRESET_COLORS[0])
+    setTarget(editing?.target ?? 1)
+    setPeriod(editing?.period ?? 'day')
+    setUnit(editing?.unit ?? '')
     setPickerOpen(false)
   }, [open, editing])
 
@@ -54,7 +64,7 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
 
   const submit = () => {
     if (!canSave) return
-    onSubmit({ name: name.trim(), icon, color })
+    onSubmit({ name: name.trim(), icon, color, target, period, unit: unit.trim() || null })
   }
 
   // Guard against a missing container (can happen during HMR hot-swaps).
@@ -105,7 +115,6 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
                 {icon}
               </div>
               <input
-                autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -215,6 +224,63 @@ export function AddHabitModal({ open, editing, onClose, onSubmit }: Props) {
                   aria-label="Custom color"
                 />
               </label>
+            </div>
+
+            {/* goal — how many times, over which period, in what unit */}
+            <Label>Goal</Label>
+            <div
+              className="mb-6 rounded-2xl border p-3"
+              style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}
+            >
+              <div className="flex items-stretch gap-3">
+                <WheelPicker
+                  values={TARGET_VALUES}
+                  value={target}
+                  onChange={setTarget}
+                  ariaLabel="times per period"
+                  className="flex-1"
+                />
+                {/* period toggle */}
+                <div className="flex w-24 flex-none flex-col justify-center gap-2">
+                  {(['day', 'week'] as GoalPeriod[]).map((p) => {
+                    const active = period === p
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setPeriod(p)}
+                        className="rounded-xl border py-2 text-sm font-medium capitalize transition-colors"
+                        style={{
+                          borderColor: active ? color : 'var(--line)',
+                          background: active
+                            ? `color-mix(in srgb, ${color} 20%, var(--surface))`
+                            : 'transparent',
+                          color: active ? 'var(--ink)' : 'var(--ink-muted)',
+                        }}
+                      >
+                        per {p}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              {/* custom unit */}
+              <div className="mt-3 flex items-center gap-3">
+                <span className="nums text-[0.66rem] uppercase tracking-[0.16em] text-muted">
+                  Unit
+                </span>
+                <input
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  placeholder="times"
+                  maxLength={24}
+                  className="flex-1 rounded-lg border bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                  style={{ borderColor: 'var(--line)' }}
+                />
+              </div>
+              {/* live summary */}
+              <div className="mt-3 text-center text-sm text-muted">
+                <span style={{ color }}>{icon}</span> {formatGoal(target, period, unit.trim() || null)}
+              </div>
             </div>
 
             <button
