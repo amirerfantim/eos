@@ -17,13 +17,14 @@ export function useCompletions(habitId: string, from: string, to: string) {
   })
 }
 
-/** Toggle a specific day's completion (heatmap backfill), optimistic. */
-export function useSetCompletion(habitId: string, from: string, to: string) {
+/** Toggle a specific day's completion (heatmap backfill), optimistic.
+ * `target` is the habit's per-day goal — marking a day sets it fully met. */
+export function useSetCompletion(habitId: string, from: string, to: string, target: number) {
   const qc = useQueryClient()
   const key = completionKeys.range(habitId, from, to)
   return useMutation({
     mutationFn: ({ date, done }: { date: string; done: boolean }) =>
-      done ? api.markCompletion(habitId, date) : api.unmarkCompletion(habitId, date),
+      api.setCompletion(habitId, date, done ? target : 0),
     onMutate: async ({ date, done }) => {
       await qc.cancelQueries({ queryKey: key })
       const prev = qc.getQueryData<string[]>(key)

@@ -5,6 +5,7 @@ independently of storage (e.g. computed stats fields that aren't columns).
 """
 
 import datetime as dt
+from typing import Literal
 
 from pydantic import Field
 from sqlmodel import SQLModel
@@ -16,6 +17,11 @@ class HabitBase(SQLModel):
     name: str = Field(min_length=1, max_length=100)
     color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")  # hex color
     icon: str = Field(min_length=1, max_length=16)  # emoji
+    # Goal: do it `target` times per `period`. unit is a display label ("glasses",
+    # "minutes"); None → "times". target=1/day is the classic binary habit.
+    target: int = Field(default=1, ge=1, le=999)
+    period: Literal["day", "week"] = "day"
+    unit: str | None = Field(default=None, max_length=24)
 
 
 class HabitCreate(HabitBase):
@@ -34,6 +40,9 @@ class HabitUpdate(SQLModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     icon: str | None = Field(default=None, min_length=1, max_length=16)
+    target: int | None = Field(default=None, ge=1, le=999)
+    period: Literal["day", "week"] | None = None
+    unit: str | None = Field(default=None, max_length=24)
     order: int | None = None
 
 
@@ -43,6 +52,7 @@ class HabitWithStats(HabitBase):
     id: str
     order: int
     created_at: dt.datetime
-    done_today: bool
+    done_today: bool  # current period's target met
+    count_today: int  # progress within the current period (day or week)
     current_streak: int
     best_streak: int

@@ -28,16 +28,18 @@ async def get_habit(session: AsyncSession, habit_id: str) -> Habit | None:
     return await session.get(Habit, habit_id)
 
 
-async def all_done_dates(session: AsyncSession) -> dict[str, set[dt.date]]:
-    """Load every completion once, grouped as {habit_id: {dates...}}.
+async def all_done_counts(session: AsyncSession) -> dict[str, dict[dt.date, int]]:
+    """Load every completion once, grouped as {habit_id: {date: count}}.
 
     Single query — keeps the habit-list endpoint O(1) queries regardless of how
     many habits exist.
     """
-    result = await session.execute(select(Completion.habit_id, Completion.date))
-    grouped: dict[str, set[dt.date]] = defaultdict(set)
-    for habit_id, date in result.all():
-        grouped[habit_id].add(date)
+    result = await session.execute(
+        select(Completion.habit_id, Completion.date, Completion.count)
+    )
+    grouped: dict[str, dict[dt.date, int]] = defaultdict(dict)
+    for habit_id, date, count in result.all():
+        grouped[habit_id][date] = count
     return grouped
 
 

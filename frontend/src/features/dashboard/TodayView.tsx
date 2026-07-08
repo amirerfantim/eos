@@ -18,7 +18,7 @@ import {
   useDeleteHabit,
   useHabits,
   useReorderHabits,
-  useToggleCompletion,
+  useSetCount,
   useUpdateHabit,
 } from '../habits/queries'
 
@@ -27,7 +27,7 @@ export function TodayView() {
   const create = useCreateHabit()
   const update = useUpdateHabit()
   const remove = useDeleteHabit()
-  const toggle = useToggleCompletion()
+  const { preview, commit } = useSetCount()
   const reorder = useReorderHabits()
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -107,12 +107,14 @@ export function TodayView() {
   orderRef.current = orderIds
   const commitOrder = () => reorder.mutate(orderRef.current)
 
-  const handleToggle = (habit: Habit) => {
-    if (!habit.done_today) {
-      // becoming done — trigger the spark burst
+  // `habit` is the value from the interaction's start, so count_today is the
+  // pre-interaction count; `count` is where it settled.
+  const handleCommit = (habit: Habit, count: number) => {
+    // Spark when this interaction tips the habit into "done" for the period.
+    if (habit.count_today < habit.target && count >= habit.target) {
       setBursts((b) => ({ ...b, [habit.id]: (b[habit.id] ?? 0) + 1 }))
     }
-    toggle.mutate(habit)
+    commit.mutate({ habit, count })
   }
 
   const openCreate = () => {
@@ -188,7 +190,8 @@ export function TodayView() {
                   key={habit.id}
                   habit={habit}
                   burst={bursts[habit.id] ?? 0}
-                  onToggle={handleToggle}
+                  onPreview={preview}
+                  onCommit={handleCommit}
                   onEdit={openEdit}
                   onDelete={requestDelete}
                   onOpenDetail={setDetail}

@@ -3,6 +3,7 @@
 // reconciles the exact streak.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { api } from '../../api/client'
 import type { Habit, HabitCreate, HabitUpdate } from '../../api/types'
 import { todayISO } from '../../lib/date'
@@ -75,43 +76,55 @@ export function useReorderHabits() {
   })
 }
 
-/** Toggle today's completion for a habit, optimistically. */
-export function useToggleCompletion() {
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+
+/** Set today's absolute progress count for a habit (used by the +/- stepper).
+ *
+ * Returns `preview` (instant, cache-only) and `commit` (persists to the server).
+ * The stepper calls `preview` on every tick — including while long-pressing —
+ * so the UI counts up smoothly, then `commit`s the final value once on release.
+ * This avoids firing (and racing) a request per tick during a rapid hold.
+ */
+export function useSetCount() {
   const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (habit: Habit) => {
-      const date = todayISO()
-      return habit.done_today
-        ? api.unmarkCompletion(habit.id, date)
-        : api.markCompletion(habit.id, date)
-    },
-    onMutate: async (habit) => {
-      await qc.cancelQueries({ queryKey: habitKeys.all })
-      const prev = qc.getQueryData<Habit[]>(habitKeys.all)
+
+  const preview = useCallback(
+    (habitId: string, count: number) => {
       qc.setQueryData<Habit[]>(habitKeys.all, (old) =>
         old?.map((h) => {
-          if (h.id !== habit.id) return h
-          const nowDone = !h.done_today
-          return {
-            ...h,
-            done_today: nowDone,
-            current_streak: Math.max(0, h.current_streak + (nowDone ? 1 : -1)),
-            best_streak: nowDone
-              ? Math.max(h.best_streak, h.current_streak + 1)
-              : h.best_streak,
+          if (h.id !== habitId) return h
+          const next = clamp(count, 0, h.target)
+          const wasMet = h.done_today
+          const nowMet = next >= h.target
+          let current = h.current_streak
+          let best = h.best_streak
+          if (!wasMet && nowMet) {
+            current += 1
+            best = Math.max(best, current)
+          } else if (wasMet && !nowMet) {
+            current = Math.max(0, current - 1)
           }
+          return { ...h, count_today: next, done_today: nowMet, current_streak: current, best_streak: best }
         }) ?? [],
       )
-      return { prev }
     },
-    onError: (_e, _habit, ctx) => {
-      if (ctx?.prev) qc.setQueryData(habitKeys.all, ctx.prev)
+    [qc],
+  )
+
+  const commit = useMutation({
+    mutationFn: ({ habit, count }: { habit: Habit; count: number }) =>
+      api.setCompletion(habit.id, todayISO(), clamp(count, 0, habit.target)),
+    onMutate: async () => {
+      // The preview already updated the cache; just stop an in-flight refetch
+      // from clobbering it before the write lands.
+      await qc.cancelQueries({ queryKey: habitKeys.all })
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: habitKeys.all })
-      // Heatmap in the detail view reads its own completions cache; refresh it
-      // so today's square reflects a toggle made from the home screen.
+      // Heatmap reads its own completions cache — refresh today's square too.
       qc.invalidateQueries({ queryKey: ['completions'] })
     },
   })
+
+  return { preview, commit }
 }
