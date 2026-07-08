@@ -25,7 +25,10 @@ Theme: **Graphite Mono** — minimal/premium, near-black graphite ground, electr
 ## Layout
 - `backend/app/{core,models,features,common}` — config/db, tables, domain modules, shared deps.
 - `frontend/src/{features,components,views,api,lib}` — (added in frontend phase).
-- Docs: `docs/architecture.md` (stack + why), `docs/api.md` (endpoints).
+- Docs: `docs/architecture.md` (stack + why), `docs/api.md` (endpoints), `docs/deploy.md` (future cloud deploy plan — decided but NOT deployed).
+
+## Deploy (planned, not done) → `docs/deploy.md`
+Decided free stack: **Cloudflare Pages** (frontend) + **Render** (backend) + **Neon** (Postgres). No card, permanent. Keep Docker files — they are the VM/baremetal path. Nothing deployed yet.
 
 ## Status
 **v1 done + verified in browser.** Full stack runs in Docker:
