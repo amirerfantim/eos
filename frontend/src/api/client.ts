@@ -40,6 +40,9 @@ export const api = {
   deleteHabit: (id: string) =>
     request<void>(`/habits/${id}`, { method: 'DELETE' }),
 
+  reorderHabits: (ids: string[]) =>
+    request<Habit[]>('/habits/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
+
   markCompletion: (habitId: string, date: string) =>
     request<void>(`/habits/${habitId}/completions/${date}`, { method: 'PUT' }),
 

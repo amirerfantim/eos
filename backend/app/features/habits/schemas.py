@@ -22,6 +22,12 @@ class HabitCreate(HabitBase):
     """Payload to create a habit."""
 
 
+class HabitReorder(SQLModel):
+    """New display order: habit ids listed front-to-back."""
+
+    ids: list[str] = Field(min_length=1)
+
+
 class HabitUpdate(SQLModel):
     """Partial update — every field optional; only provided ones change."""
 
