@@ -36,3 +36,6 @@ pgdata/
 # Stray artifacts from running pnpm inside the frontend container
 frontend/.pnpm-store/
 frontend/pnpm-lock.yaml
+
+# Local /lavish skill artifacts
+.lavish/
