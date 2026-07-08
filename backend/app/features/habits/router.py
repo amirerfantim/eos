@@ -11,7 +11,12 @@ from fastapi import APIRouter, HTTPException, status
 from app.common.deps import SessionDep
 from app.common.time import today_in
 from app.features.habits import service, stats
-from app.features.habits.schemas import HabitCreate, HabitUpdate, HabitWithStats
+from app.features.habits.schemas import (
+    HabitCreate,
+    HabitReorder,
+    HabitUpdate,
+    HabitWithStats,
+)
 from app.features.settings import service as settings_service
 from app.models import Habit
 
@@ -52,6 +57,18 @@ async def create_habit(payload: HabitCreate, session: SessionDep) -> HabitWithSt
     today = await _today(session)
     habit = await service.create_habit(session, payload)
     return _with_stats(habit, set(), today)
+
+
+@router.put("/reorder", response_model=list[HabitWithStats])
+async def reorder_habits(
+    payload: HabitReorder, session: SessionDep
+) -> list[HabitWithStats]:
+    """Persist a new display order, then return the full list in that order.
+
+    Declared before ``/{habit_id}`` so the literal ``reorder`` path wins.
+    """
+    await service.reorder_habits(session, payload)
+    return await list_habits(session)
 
 
 @router.patch("/{habit_id}", response_model=HabitWithStats)

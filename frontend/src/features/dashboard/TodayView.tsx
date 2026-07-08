@@ -1,9 +1,9 @@
 // The Today screen: greeting, day-progress ring, the habit list, and the add
 // button. Owns the create/edit sheet and per-habit completion bursts.
 
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, Reorder, motion } from 'framer-motion'
 import { Plus } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Habit, HabitCreate } from '../../api/types'
 import { ThemeToggle } from '../../components/ThemeToggle'
 import { greeting, longDate } from '../../lib/date'
@@ -17,6 +17,7 @@ import {
   useCreateHabit,
   useDeleteHabit,
   useHabits,
+  useReorderHabits,
   useToggleCompletion,
   useUpdateHabit,
 } from '../habits/queries'
@@ -27,6 +28,7 @@ export function TodayView() {
   const update = useUpdateHabit()
   const remove = useDeleteHabit()
   const toggle = useToggleCompletion()
+  const reorder = useReorderHabits()
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Habit | null>(null)
@@ -40,10 +42,32 @@ export function TodayView() {
   const total = habits?.length ?? 0
   const progress = total > 0 ? doneCount / total : 0
 
-  const sorted = useMemo(
-    () => (habits ? [...habits].sort((a, b) => a.order - b.order) : []),
-    [habits],
+  // Drag-reorder is driven by a local id list so a drag reads instantly. It
+  // resets to the server order only when the *set* of habits changes (add /
+  // delete) — a plain streak refetch keeps the user's in-progress order.
+  const [orderIds, setOrderIds] = useState<string[]>([])
+  useEffect(() => {
+    if (!habits) return
+    const serverIds = [...habits].sort((a, b) => a.order - b.order).map((h) => h.id)
+    setOrderIds((prev) => {
+      const sameSet =
+        prev.length === serverIds.length && prev.every((id) => serverIds.includes(id))
+      return sameSet ? prev : serverIds
+    })
+  }, [habits])
+
+  const orderedHabits = useMemo(
+    () =>
+      orderIds
+        .map((id) => habits?.find((h) => h.id === id))
+        .filter((h): h is Habit => Boolean(h)),
+    [orderIds, habits],
   )
+
+  // Persist on drop; a ref keeps the callback reading the latest order.
+  const orderRef = useRef<string[]>([])
+  orderRef.current = orderIds
+  const commitOrder = () => reorder.mutate(orderRef.current)
 
   const handleToggle = (habit: Habit) => {
     if (!habit.done_today) {
@@ -110,14 +134,18 @@ export function TodayView() {
         )}
         {!isLoading && !isError && total === 0 && <EmptyState onAdd={openCreate} />}
         {total > 0 && (
-          <motion.div
+          <Reorder.Group
+            as="div"
+            axis="y"
+            values={orderIds}
+            onReorder={setOrderIds}
             variants={listContainer}
             initial="hidden"
             animate="show"
             className="flex flex-col gap-3"
           >
             <AnimatePresence>
-              {sorted.map((habit) => (
+              {orderedHabits.map((habit) => (
                 <HabitCard
                   key={habit.id}
                   habit={habit}
@@ -126,10 +154,11 @@ export function TodayView() {
                   onEdit={openEdit}
                   onDelete={(h) => remove.mutate(h.id)}
                   onOpenDetail={setDetail}
+                  onReorderCommit={commitOrder}
                 />
               ))}
             </AnimatePresence>
-          </motion.div>
+          </Reorder.Group>
         )}
       </main>
 

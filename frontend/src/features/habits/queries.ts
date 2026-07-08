@@ -48,6 +48,33 @@ export function useDeleteHabit() {
   })
 }
 
+/** Persist a new habit order (drag-reorder), optimistically. */
+export function useReorderHabits() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => api.reorderHabits(ids),
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: habitKeys.all })
+      const prev = qc.getQueryData<Habit[]>(habitKeys.all)
+      qc.setQueryData<Habit[]>(habitKeys.all, (old) => {
+        if (!old) return old
+        const byId = new Map(old.map((h) => [h.id, h]))
+        return ids
+          .map((id, i) => {
+            const h = byId.get(id)
+            return h ? { ...h, order: i } : null
+          })
+          .filter((h): h is Habit => h !== null)
+      })
+      return { prev }
+    },
+    onError: (_e, _ids, ctx) => {
+      if (ctx?.prev) qc.setQueryData(habitKeys.all, ctx.prev)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: habitKeys.all }),
+  })
+}
+
 /** Toggle today's completion for a habit, optimistically. */
 export function useToggleCompletion() {
   const qc = useQueryClient()

@@ -2,7 +2,7 @@
 // to toggle today; the kebab opens a portal menu (edits or deletes) that floats
 // above every card and flips up/down to stay on-screen.
 
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, Reorder, motion, useDragControls } from 'framer-motion'
 import { BarChart3, Flame, MoreHorizontal, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -17,7 +17,14 @@ interface Props {
   onEdit: (habit: Habit) => void
   onDelete: (habit: Habit) => void
   onOpenDetail: (habit: Habit) => void
+  /** Persist the current order once a drag settles. */
+  onReorderCommit: () => void
 }
+
+// How long to hold before a card lifts for dragging, and how far a finger may
+// drift in that window before we treat the gesture as a scroll instead.
+const LONG_PRESS_MS = 220
+const MOVE_CANCEL_PX = 10
 
 const MENU_W = 172
 const MENU_H = 96
@@ -28,9 +35,67 @@ interface MenuPos {
   origin: 'top' | 'bottom'
 }
 
-export function HabitCard({ habit, burst, onToggle, onEdit, onDelete, onOpenDetail }: Props) {
+export function HabitCard({
+  habit,
+  burst,
+  onToggle,
+  onEdit,
+  onDelete,
+  onOpenDetail,
+  onReorderCommit,
+}: Props) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [menu, setMenu] = useState<MenuPos | null>(null)
+
+  // Long-press → drag. A tap toggles completion, so a drag must be a deliberate
+  // hold; the timer arms on pointer-down and fires only if the finger stays put.
+  const controls = useDragControls()
+  const pressTimer = useRef<number | null>(null)
+  const pressStart = useRef<{ x: number; y: number } | null>(null)
+  const lastDragEnd = useRef(0)
+
+  const cancelPress = useCallback(() => {
+    if (pressTimer.current !== null) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    pressStart.current = null
+  }, [])
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      // Buttons (icon, kebab, check) own their own gestures — never hijack them.
+      if ((e.target as HTMLElement).closest('button')) return
+      pressStart.current = { x: e.clientX, y: e.clientY }
+      const ev = e.nativeEvent
+      pressTimer.current = window.setTimeout(() => {
+        pressTimer.current = null
+        navigator.vibrate?.(15)
+        controls.start(ev)
+      }, LONG_PRESS_MS)
+    },
+    [controls],
+  )
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const start = pressStart.current
+      if (pressTimer.current === null || !start) return
+      if (
+        Math.abs(e.clientX - start.x) > MOVE_CANCEL_PX ||
+        Math.abs(e.clientY - start.y) > MOVE_CANCEL_PX
+      ) {
+        cancelPress() // moving before the hold completes = a scroll, not a drag
+      }
+    },
+    [cancelPress],
+  )
+
+  // A drag ends with a synthetic click; swallow toggles fired right after one.
+  const handleCardClick = () => {
+    if (Date.now() - lastDragEnd.current < 250) return
+    onToggle(habit)
+  }
 
   const openMenu = useCallback(() => {
     const el = btnRef.current
@@ -63,11 +128,14 @@ export function HabitCard({ habit, burst, onToggle, onEdit, onDelete, onOpenDeta
   }, [menu, closeMenu])
 
   return (
-    <motion.div
+    <Reorder.Item
+      value={habit.id}
+      dragListener={false}
+      dragControls={controls}
       variants={listItem}
-      layout
-      className="relative flex cursor-pointer items-center gap-3.5 rounded-[20px] border p-3.5 transition-colors"
+      className="relative flex touch-none select-none items-center gap-3.5 rounded-[20px] border p-3.5 transition-colors"
       style={{
+        cursor: 'grab',
         background: 'var(--surface-2)',
         borderColor: habit.done_today
           ? 'color-mix(in srgb, var(--accent) 45%, var(--line))'
@@ -76,7 +144,17 @@ export function HabitCard({ habit, burst, onToggle, onEdit, onDelete, onOpenDeta
       }}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
-      onClick={() => onToggle(habit)}
+      whileDrag={{ scale: 1.03, cursor: 'grabbing', boxShadow: '0 22px 44px -12px var(--accent)' }}
+      onDragEnd={() => {
+        lastDragEnd.current = Date.now()
+        onReorderCommit()
+      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={cancelPress}
+      onPointerCancel={cancelPress}
+      onPointerLeave={cancelPress}
+      onClick={handleCardClick}
       role="button"
       aria-pressed={habit.done_today}
       tabIndex={0}
@@ -216,7 +294,7 @@ export function HabitCard({ habit, burst, onToggle, onEdit, onDelete, onOpenDeta
         </AnimatePresence>,
         document.body,
       )}
-    </motion.div>
+    </Reorder.Item>
   )
 }
 
