@@ -11,7 +11,7 @@ from collections import defaultdict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.features.habits.schemas import HabitCreate, HabitUpdate
+from app.features.habits.schemas import HabitCreate, HabitReorder, HabitUpdate
 from app.models import Completion, Habit
 
 
@@ -61,6 +61,21 @@ async def update_habit(
     await session.commit()
     await session.refresh(habit)
     return habit
+
+
+async def reorder_habits(session: AsyncSession, data: HabitReorder) -> None:
+    """Persist a new display order: each habit's `order` becomes its list index.
+
+    Ids not found are ignored; habits absent from the list keep their old order
+    (they simply sort after the reordered ones on the next fetch).
+    """
+    result = await session.execute(select(Habit).where(Habit.id.in_(data.ids)))
+    by_id = {h.id: h for h in result.scalars().all()}
+    for index, habit_id in enumerate(data.ids):
+        habit = by_id.get(habit_id)
+        if habit is not None:
+            habit.order = index
+    await session.commit()
 
 
 async def delete_habit(session: AsyncSession, habit: Habit) -> None:
