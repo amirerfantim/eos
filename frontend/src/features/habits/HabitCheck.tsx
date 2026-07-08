@@ -17,9 +17,14 @@ interface Props {
   done: boolean
   /** increments each time the habit is completed, to trigger the burst */
   burst: number
+  /** the habit's accent color; the check glows in it when done */
+  color?: string
 }
 
-export function HabitCheck({ done, burst }: Props) {
+export function HabitCheck({ done, burst, color = 'var(--accent)' }: Props) {
+  // A lighter tint of the color for the gradient's far stop + alternating sparks.
+  const light = `color-mix(in srgb, ${color} 55%, white)`
+
   return (
     <div className="relative grid h-9 w-9 place-items-center">
       {/* ripple */}
@@ -28,7 +33,7 @@ export function HabitCheck({ done, burst }: Props) {
           <motion.span
             key={burst}
             className="absolute h-9 w-9 rounded-full"
-            style={{ border: '2px solid var(--accent)' }}
+            style={{ border: `2px solid ${color}` }}
             initial={{ scale: 0.6, opacity: 0.8 }}
             animate={{ scale: 2.4, opacity: 0 }}
             transition={{ duration: 0.55, ease: 'easeOut' }}
@@ -44,7 +49,7 @@ export function HabitCheck({ done, burst }: Props) {
               <motion.span
                 key={s.i}
                 className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full"
-                style={{ background: s.i % 2 ? 'var(--accent-2)' : 'var(--accent)' }}
+                style={{ background: s.i % 2 ? light : color }}
                 initial={{ x: '-50%', y: '-50%', opacity: 1, scale: 1 }}
                 animate={{ x: `calc(-50% + ${s.x}px)`, y: `calc(-50% + ${s.y}px)`, opacity: 0, scale: 0.2 }}
                 transition={{ duration: 0.6, ease: 'easeOut' }}
@@ -62,8 +67,8 @@ export function HabitCheck({ done, burst }: Props) {
         style={
           done
             ? {
-                backgroundImage: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
-                boxShadow: '0 0 18px -2px var(--accent)',
+                backgroundImage: `linear-gradient(135deg, ${color}, ${light})`,
+                boxShadow: `0 0 18px -2px ${color}`,
               }
             : { border: '2px solid color-mix(in srgb, var(--ink-muted) 45%, transparent)' }
         }
