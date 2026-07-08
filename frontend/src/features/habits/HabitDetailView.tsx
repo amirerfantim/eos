@@ -46,7 +46,7 @@ function Sheet({ habit, onClose, onEdit, onDelete }: { habit: Habit } & Omit<Pro
   const to = todayISO()
 
   const { data: dates = [] } = useCompletions(habit.id, from, to)
-  const setCompletion = useSetCompletion(habit.id, from, to)
+  const setCompletion = useSetCompletion(habit.id, from, to, habit.target)
   const doneSet = new Set(dates)
 
   const total = dates.length
@@ -111,10 +111,10 @@ function Sheet({ habit, onClose, onEdit, onDelete }: { habit: Habit } & Omit<Pro
 
         {/* stats */}
         <motion.div variants={listContainer} initial="hidden" animate="show" className="mt-6 grid grid-cols-2 gap-3">
-          <Stat icon={<Flame size={16} className="text-accent" />} label="Current streak" value={`${habit.current_streak}`} unit={habit.current_streak === 1 ? 'day' : 'days'} />
-          <Stat icon={<Trophy size={16} className="text-accent" />} label="Best streak" value={`${habit.best_streak}`} unit={habit.best_streak === 1 ? 'day' : 'days'} />
-          <Stat icon={<CheckCircle2 size={16} className="text-accent" />} label="Total done" value={`${total}`} unit={total === 1 ? 'day' : 'days'} />
-          <Stat icon={<CalendarDays size={16} className="text-accent" />} label="This month" value={`${thisMonth}`} unit={thisMonth === 1 ? 'day' : 'days'} />
+          <Stat icon={<Flame size={16} style={{ color: habit.color }} />} label="Current streak" value={`${habit.current_streak}`} unit={habit.current_streak === 1 ? 'day' : 'days'} />
+          <Stat icon={<Trophy size={16} style={{ color: habit.color }} />} label="Best streak" value={`${habit.best_streak}`} unit={habit.best_streak === 1 ? 'day' : 'days'} />
+          <Stat icon={<CheckCircle2 size={16} style={{ color: habit.color }} />} label="Total done" value={`${total}`} unit={total === 1 ? 'day' : 'days'} />
+          <Stat icon={<CalendarDays size={16} style={{ color: habit.color }} />} label="This month" value={`${thisMonth}`} unit={thisMonth === 1 ? 'day' : 'days'} />
         </motion.div>
 
         {/* heatmap */}
@@ -123,6 +123,7 @@ function Sheet({ habit, onClose, onEdit, onDelete }: { habit: Habit } & Omit<Pro
           <Heatmap
             doneSet={doneSet}
             today={today}
+            color={habit.color}
             onToggle={(date, done) => setCompletion.mutate({ date, done })}
           />
         </div>

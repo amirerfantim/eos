@@ -9,6 +9,8 @@ interface Props {
   doneSet: Set<string>
   today: Date
   weeks?: number
+  /** habit accent — done cells glow in it (defaults to the app accent) */
+  color?: string
   onToggle: (date: string, done: boolean) => void
 }
 
@@ -16,10 +18,13 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const CELL = 13
 const GAP = 3
 
-export function Heatmap({ doneSet, today, weeks = 18, onToggle }: Props) {
+export function Heatmap({ doneSet, today, weeks = 18, color = 'var(--accent)', onToggle }: Props) {
   const lastWeekStart = startOfWeek(today)
   const firstWeekStart = addDays(lastWeekStart, -(weeks - 1) * 7)
   const todayStr = isoDate(today)
+  // A lighter tint of the habit color for the cell's gradient far stop.
+  const doneBg = `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 55%, white))`
+  const doneGlow = `0 0 8px -1px ${color}`
 
   // Build [week][day] date matrix.
   const columns = Array.from({ length: weeks }, (_, w) => {
@@ -85,12 +90,8 @@ export function Heatmap({ doneSet, today, weeks = 18, onToggle }: Props) {
                       width: CELL,
                       height: CELL,
                       cursor: future ? 'default' : 'pointer',
-                      background: done
-                        ? 'linear-gradient(135deg, var(--accent), var(--accent-2))'
-                        : 'var(--surface-2)',
-                      boxShadow: done
-                        ? '0 0 8px -1px var(--accent)'
-                        : 'inset 0 0 0 1px var(--line)',
+                      background: done ? doneBg : 'var(--surface-2)',
+                      boxShadow: done ? doneGlow : 'inset 0 0 0 1px var(--line)',
                       opacity: future ? 0.25 : 1,
                     }}
                   />
@@ -104,7 +105,7 @@ export function Heatmap({ doneSet, today, weeks = 18, onToggle }: Props) {
         <div className="nums mt-1 flex items-center gap-2 text-[0.6rem] text-muted" style={{ paddingLeft: 22 }}>
           <span>Not done</span>
           <span className="rounded-[3px]" style={{ width: CELL, height: CELL, background: 'var(--surface-2)', boxShadow: 'inset 0 0 0 1px var(--line)' }} />
-          <span className="rounded-[3px]" style={{ width: CELL, height: CELL, background: 'linear-gradient(135deg, var(--accent), var(--accent-2))' }} />
+          <span className="rounded-[3px]" style={{ width: CELL, height: CELL, background: doneBg }} />
           <span>Done · tap a day to edit</span>
         </div>
       </div>
