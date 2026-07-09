@@ -6,7 +6,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Completion
+from app.models import Completion, Habit
 
 
 async def set_count(
@@ -17,7 +17,17 @@ async def set_count(
     count <= 0 removes the row entirely (a day with no progress). Returns the
     stored count (0 if the row was removed). Relies on the (habit_id, date)
     unique constraint to stay a single row per day under concurrent writes.
+
+    Logging progress on a day earlier than the habit's start moves the start
+    date back to that day, so the habit begins counting toward rates from then.
     """
+    if count > 0:
+        habit = await session.get(Habit, habit_id)
+        if habit is not None and day < habit.created_at.date():
+            habit.created_at = dt.datetime.combine(day, dt.time.min)
+            session.add(habit)
+            await session.commit()
+
     if count <= 0:
         await session.execute(
             delete(Completion).where(

@@ -6,12 +6,13 @@ info) so the UI has everything it needs in one call.
 
 import datetime as dt
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.common.deps import SessionDep
 from app.common.time import today_in
 from app.features.habits import service, stats
 from app.features.habits.schemas import (
+    DaySummary,
     HabitCreate,
     HabitReorder,
     HabitUpdate,
@@ -46,12 +47,70 @@ async def _today(session: SessionDep) -> dt.date:
 
 
 @router.get("", response_model=list[HabitWithStats])
-async def list_habits(session: SessionDep) -> list[HabitWithStats]:
-    """List all habits with their current stats (single query for completions)."""
-    today = await _today(session)
+async def list_habits(
+    session: SessionDep,
+    on: dt.date | None = Query(
+        default=None,
+        description="Reckon stats as of this day (YYYY-MM-DD). Defaults to today.",
+    ),
+) -> list[HabitWithStats]:
+    """List all habits with their stats, reckoned as of `on` (default today).
+
+    Passing `on` lets the client time-travel: `count_today`/`done_today` and the
+    streaks are all computed relative to that day, so the same habit list powers
+    any date the user scrolls to.
+    """
+    reference = on or await _today(session)
     habits = await service.list_habits(session)
     grouped = await service.all_done_counts(session)
-    return [_with_stats(h, grouped.get(h.id, {}), today) for h in habits]
+    # Every habit is shown on every day so the user can backfill a habit into a
+    # past day (which moves its start date back — see completions.set_count).
+    # Whether a habit *counts* toward a day's rate is decided by the client and
+    # the summary endpoint, both using each habit's start date.
+    return [_with_stats(h, grouped.get(h.id, {}), reference) for h in habits]
+
+
+# Newest-first so the tightest window loads first; capped to keep it cheap.
+_MAX_SUMMARY_DAYS = 400
+
+
+@router.get("/summary", response_model=list[DaySummary])
+async def day_summaries(
+    session: SessionDep,
+    from_: dt.date = Query(alias="from", description="First day (inclusive)."),
+    to: dt.date = Query(description="Last day (inclusive)."),
+) -> list[DaySummary]:
+    """Per-day completion tally over [from, to] for the date-timeline rings.
+
+    Computed in memory from a single completions query, so a whole window costs
+    one round-trip regardless of how many days it spans.
+    """
+    if to < from_:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="`to` precedes `from`")
+    if (to - from_).days + 1 > _MAX_SUMMARY_DAYS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Range too wide (max {_MAX_SUMMARY_DAYS} days)",
+        )
+
+    habits = await service.list_habits(session)
+    grouped = await service.all_done_counts(session)
+
+    out: list[DaySummary] = []
+    day = from_
+    while day <= to:
+        # Only habits that already existed on `day` count toward its ring, so a
+        # historical day's total reflects the habits that existed then — not
+        # today's (larger) set.
+        existing = [h for h in habits if h.created_at.date() <= day]
+        done = sum(
+            1
+            for h in existing
+            if stats.compute_stats(grouped.get(h.id, {}), day, h.target, h.period)[0]
+        )
+        out.append(DaySummary(date=day, done=done, total=len(existing)))
+        day += dt.timedelta(days=1)
+    return out
 
 
 @router.post("", response_model=HabitWithStats, status_code=status.HTTP_201_CREATED)
@@ -83,6 +142,10 @@ async def update_habit(
     if habit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Habit not found")
     today = await _today(session)
+    if payload.started_on is not None and payload.started_on > today:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Start date can't be in the future"
+        )
     updated = await service.update_habit(session, habit, payload)
     grouped = await service.all_done_counts(session)
     return _with_stats(updated, grouped.get(habit_id, {}), today)
