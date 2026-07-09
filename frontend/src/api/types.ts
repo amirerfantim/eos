@@ -38,8 +38,17 @@ export interface HabitUpdate {
   period?: GoalPeriod
   unit?: string | null
   order?: number
+  /** Moves the habit's start date ('YYYY-MM-DD'); maps onto `created_at`. */
+  started_on?: string
 }
 
 export interface AppSettings {
   timezone: string
+}
+
+/** Per-day completion tally for the date-timeline rings. */
+export interface DaySummary {
+  date: string // 'YYYY-MM-DD'
+  done: number // habits that met their goal that day
+  total: number // active habit count
 }
