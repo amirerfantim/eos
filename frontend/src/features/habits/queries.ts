@@ -52,7 +52,15 @@ export function useUpdateHabit() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: HabitUpdate }) => api.updateHabit(id, data),
-    onSuccess: () => invalidateHabits(qc),
+    onSuccess: () => {
+      invalidateHabits(qc)
+      // A start-date change (or any edit) can shift which days a habit counts
+      // toward — and can delete completions outright (see habits.service
+      // .update_habit) — so the date-strip rings and the habit's own heatmap
+      // both need a fresh pull too.
+      qc.invalidateQueries({ queryKey: ['day-summary'] })
+      qc.invalidateQueries({ queryKey: ['completions'] })
+    },
   })
 }
 
