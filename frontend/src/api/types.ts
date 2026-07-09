@@ -38,6 +38,8 @@ export interface HabitUpdate {
   period?: GoalPeriod
   unit?: string | null
   order?: number
+  /** Moves the habit's start date ('YYYY-MM-DD'); maps onto `created_at`. */
+  started_on?: string
 }
 
 export interface AppSettings {

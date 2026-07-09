@@ -8,7 +8,7 @@ memory, keyed by habit id.
 import datetime as dt
 from collections import defaultdict
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.habits.schemas import HabitCreate, HabitReorder, HabitUpdate
@@ -56,8 +56,23 @@ async def create_habit(session: AsyncSession, data: HabitCreate) -> Habit:
 async def update_habit(
     session: AsyncSession, habit: Habit, data: HabitUpdate
 ) -> Habit:
-    """Apply a partial update to an existing habit."""
-    for field, value in data.model_dump(exclude_unset=True).items():
+    """Apply a partial update to an existing habit.
+
+    `started_on` is wire-only — it maps onto `created_at`'s date (the field
+    that actually gates a day's completion rate; see completions.set_count).
+    Moving it forward drops any progress logged before the new date, since
+    those days would otherwise be stranded before the habit "existed".
+    """
+    fields = data.model_dump(exclude_unset=True)
+    started_on = fields.pop("started_on", None)
+    if started_on is not None:
+        habit.created_at = dt.datetime.combine(started_on, dt.time.min)
+        await session.execute(
+            delete(Completion).where(
+                and_(Completion.habit_id == habit.id, Completion.date < started_on)
+            )
+        )
+    for field, value in fields.items():
         setattr(habit, field, value)
     session.add(habit)
     await session.commit()

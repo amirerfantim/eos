@@ -142,6 +142,10 @@ async def update_habit(
     if habit is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Habit not found")
     today = await _today(session)
+    if payload.started_on is not None and payload.started_on > today:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Start date can't be in the future"
+        )
     updated = await service.update_habit(session, habit, payload)
     grouped = await service.all_done_counts(session)
     return _with_stats(updated, grouped.get(habit_id, {}), today)

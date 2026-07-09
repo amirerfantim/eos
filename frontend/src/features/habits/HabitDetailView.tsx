@@ -3,6 +3,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
@@ -13,11 +14,13 @@ import {
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useEffect } from 'react'
+import type { ApiError } from '../../api/client'
 import type { Habit } from '../../api/types'
-import { addDays, isoDate, todayISO } from '../../lib/date'
+import { addDays, dateOnly, isoDate, parseISO, todayISO } from '../../lib/date'
 import { listContainer, listItem, overlay } from '../../lib/motion'
 import { Heatmap } from '../completions/Heatmap'
 import { useCompletions, useSetCompletion } from '../completions/queries'
+import { useUpdateHabit } from './queries'
 
 interface Props {
   habit: Habit | null
@@ -117,6 +120,11 @@ function Sheet({ habit, onClose, onEdit, onDelete }: { habit: Habit } & Omit<Pro
           <Stat icon={<CalendarDays size={16} style={{ color: habit.color }} />} label="This month" value={`${thisMonth}`} unit={thisMonth === 1 ? 'day' : 'days'} />
         </motion.div>
 
+        {/* start date — tap to fix an accidental early/late start */}
+        <div className="mt-3">
+          <StartDateField habit={habit} />
+        </div>
+
         {/* heatmap */}
         <div className="mt-7">
           <div className="nums mb-3 text-[0.66rem] uppercase tracking-[0.16em] text-muted">Activity</div>
@@ -129,6 +137,79 @@ function Sheet({ habit, onClose, onEdit, onDelete }: { habit: Habit } & Omit<Pro
         </div>
       </motion.div>
     </motion.div>
+  )
+}
+
+/** The habit's start date, editable in place — a native date input sits
+ *  invisibly over a custom pill, so tapping opens the phone's own date wheel
+ *  while the visible design stays fully on-theme. */
+function StartDateField({ habit }: { habit: Habit }) {
+  const update = useUpdateHabit()
+  const value = dateOnly(habit.created_at)
+  const today = todayISO()
+  const days = Math.round((parseISO(today).getTime() - parseISO(value).getTime()) / 86_400_000)
+  const relative = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.value
+    if (!next || next === value) return
+    update.mutate({ id: habit.id, data: { started_on: next } })
+  }
+
+  return (
+    <div>
+      <motion.label
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
+        whileTap={{ scale: 0.985 }}
+        className="relative flex items-center gap-3 overflow-hidden rounded-2xl border p-4"
+        style={{ background: 'var(--surface-2)', borderColor: 'var(--line)' }}
+      >
+        <span
+          className="grid h-9 w-9 flex-none place-items-center rounded-full"
+          style={{ background: `color-mix(in srgb, ${habit.color} 20%, var(--surface))`, color: habit.color }}
+        >
+          <CalendarClock size={16} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.72rem] text-muted">Started</span>
+          <span className="nums block truncate text-sm font-semibold text-ink">
+            {parseISO(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+          </span>
+          <span className="block truncate text-[0.72rem] text-muted">{relative}</span>
+        </span>
+        <span
+          className="flex flex-none items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+          style={{ color: habit.color }}
+        >
+          <Pencil size={13} />
+          Change
+        </span>
+        {/* invisible native picker — full-bleed so the whole row is the tap target */}
+        <input
+          type="date"
+          value={value}
+          max={today}
+          onChange={handleChange}
+          aria-label="Habit start date"
+          className="absolute inset-0 cursor-pointer opacity-0"
+        />
+      </motion.label>
+      <AnimatePresence>
+        {update.isError && (
+          <motion.p
+            initial={{ opacity: 0, y: -4, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -4, height: 0 }}
+            className="mt-2 px-1 text-xs"
+            style={{ color: '#fb7185' }}
+          >
+            {(update.error as ApiError | null)?.message ?? "Couldn't change the start date."}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
