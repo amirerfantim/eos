@@ -398,7 +398,7 @@ export function HabitCard({
           style={counted ? { textShadow: '0 1px 3px rgba(0,0,0,0.6)' } : undefined}
         >
           <div className="truncate font-semibold tracking-tight">{habit.name}</div>
-          <div className="nums mt-0.5 flex items-center gap-1.5 text-[0.78rem] text-muted">
+          <div className="nums mt-0.5 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[0.78rem] text-muted">
             {notStarted ? (
               <>
                 <History size={13} />
