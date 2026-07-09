@@ -289,7 +289,7 @@ export function HabitCard({
         }}
         animate={{ opacity: notStarted ? 0.62 : 1 }}
         transition={{ duration: 0.35, ease: 'easeOut' }}
-        className="relative z-10 flex touch-none select-none items-center gap-3.5 overflow-hidden rounded-[20px] border p-3.5 transition-[border-color,background-color]"
+        className="relative z-10 flex touch-pan-y select-none items-center gap-3.5 overflow-hidden rounded-[20px] border p-3.5 transition-[border-color,background-color]"
         onClick={handleSurfaceClick}
         role="button"
         aria-pressed={habit.done_today}
