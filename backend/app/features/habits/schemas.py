@@ -44,6 +44,10 @@ class HabitUpdate(SQLModel):
     period: Literal["day", "week"] | None = None
     unit: str | None = Field(default=None, max_length=24)
     order: int | None = None
+    # Moves the habit's start date directly (see habits.service.update_habit).
+    # Can't be in the future. Moving it forward drops any completions logged
+    # before the new date, since a habit can't have progress before it started.
+    started_on: dt.date | None = None
 
 
 class HabitWithStats(HabitBase):
@@ -56,3 +60,15 @@ class HabitWithStats(HabitBase):
     count_today: int  # progress within the current period (day or week)
     current_streak: int
     best_streak: int
+
+
+class DaySummary(SQLModel):
+    """Per-day completion tally that powers the date-timeline rings.
+
+    `done` = how many habits met their goal on that date; `total` = active
+    habit count. The ring fill is `done / total`.
+    """
+
+    date: dt.date
+    done: int
+    total: int
