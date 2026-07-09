@@ -44,6 +44,10 @@ class HabitUpdate(SQLModel):
     period: Literal["day", "week"] | None = None
     unit: str | None = Field(default=None, max_length=24)
     order: int | None = None
+    # Moves the habit's start date directly (see habits.service.update_habit).
+    # Can't be in the future. Moving it forward drops any completions logged
+    # before the new date, since a habit can't have progress before it started.
+    started_on: dt.date | None = None
 
 
 class HabitWithStats(HabitBase):
