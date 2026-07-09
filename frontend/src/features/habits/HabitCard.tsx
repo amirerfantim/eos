@@ -1,9 +1,17 @@
-// A single habit row. Tap toggles today; long-press lifts it to reorder; swipe
-// left reveals an action drawer (Detail / Edit / Delete). The visible surface is
-// a foreground layer that slides on the x-axis over the actions behind it.
+// A single habit row. Tap toggles today; long-press the grip handle lifts it
+// to reorder; swipe left reveals an action drawer (Detail / Edit / Delete).
+// The visible surface is a foreground layer that slides on the x-axis over
+// the actions behind it.
+//
+// Reorder is handle-only (not long-press-anywhere) because touch-action is
+// fixed for a touch at the moment it starts — on iOS Safari there is no way
+// to hand a vertical touch that began as "maybe a drag" back to native
+// scroll, or vice versa, mid-gesture. Restricting the drag trigger to a
+// small always-none-touch-action handle keeps the rest of the card free for
+// native, no-JS-in-the-way scrolling.
 
 import { Reorder, animate, motion, useDragControls, useMotionValue, useTransform } from 'framer-motion'
-import { BarChart3, Flame, History, Minus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { BarChart3, Flame, GripVertical, History, Minus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import type { Habit } from '../../api/types'
 import { dateOnly } from '../../lib/date'
@@ -93,62 +101,38 @@ export function HabitCard({
     animate(x, 0, snap)
   }, [x])
 
-  // Gestures share one set of pointer handlers on the container:
-  //  • hold still ~220ms  → lift for reorder (framer dragControls)
-  //  • move horizontally  → swipe the foreground (we drive `x` by hand, because
-  //    a nested framer `drag` gets swallowed by the Reorder drag context)
-  //  • tap                → toggle complete
+  // The card body only ever does two things: swipe horizontally to reveal the
+  // drawer, and tap to complete. Native vertical scroll is left entirely to
+  // the browser (touch-action: pan-y, unset by JS) — see the grip handle
+  // below for how reorder-drag is triggered instead.
   const controls = useDragControls()
-  const pressTimer = useRef<number | null>(null)
   const pressStart = useRef<{ x: number; y: number } | null>(null)
   const swipeBase = useRef(0) // `x` value when the gesture began
   const swiping = useRef(false)
-  const reorderLifted = useRef(false)
   const lastDragEnd = useRef(0)
-
-  // Cancels only the long-press timer. It must NOT clear `pressStart`, because an
-  // in-progress swipe keeps reading it to compute the drag delta.
-  const cancelPress = useCallback(() => {
-    if (pressTimer.current !== null) {
-      clearTimeout(pressTimer.current)
-      pressTimer.current = null
-    }
-  }, [])
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      // Buttons (icon, actions, check) own their own gestures — don't hijack.
+      // Buttons (icon, actions, check, drag handle) own their own gestures.
       if ((e.target as HTMLElement).closest('button')) return
       pressStart.current = { x: e.clientX, y: e.clientY }
       swipeBase.current = x.get()
       swiping.current = false
-      reorderLifted.current = false
-      const ev = e.nativeEvent
-      pressTimer.current = window.setTimeout(() => {
-        pressTimer.current = null
-        reorderLifted.current = true
-        navigator.vibrate?.(15)
-        controls.start(ev)
-      }, LONG_PRESS_MS)
     },
-    [controls, x],
+    [x],
   )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       const start = pressStart.current
-      if (!start || reorderLifted.current) return
+      if (!start) return
       const dx = e.clientX - start.x
       const dy = e.clientY - start.y
       if (!swiping.current) {
         if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
           swiping.current = true // horizontal intent → begin swipe
-          cancelPress()
-        } else if (Math.abs(dy) > MOVE_CANCEL_PX) {
-          cancelPress() // vertical drift with no hold → abandon
-          return
         } else {
-          return
+          return // vertical (or undecided) — leave it to native scroll
         }
       }
       // Drive the foreground, resisting past the open/closed limits (rubber-band).
@@ -157,7 +141,7 @@ export function HabitCard({
       else if (nx < OPEN_X) nx = OPEN_X + (nx - OPEN_X) * 0.2
       x.set(nx)
     },
-    [cancelPress, x],
+    [x],
   )
 
   const endGesture = useCallback(() => {
@@ -166,10 +150,49 @@ export function HabitCard({
       lastDragEnd.current = Date.now()
       x.get() < OPEN_X * 0.4 ? openDrawer() : closeDrawer()
     }
-    reorderLifted.current = false
     pressStart.current = null // origin no longer needed once the gesture ends
-    cancelPress()
-  }, [cancelPress, x, openDrawer, closeDrawer])
+  }, [x, openDrawer, closeDrawer])
+
+  // The drag handle: the only place a long-press lifts the card for reorder.
+  // Its touch-action is 'none' from render (not toggled at runtime), so the
+  // browser never has a scroll-vs-drag decision to make for a touch that
+  // starts here — the ambiguity that broke things when it lived on the whole
+  // card. Runs for mouse and touch alike, so the gesture is consistent
+  // across devices.
+  const handlePressTimer = useRef<number | null>(null)
+  const handlePressStart = useRef<{ x: number; y: number } | null>(null)
+
+  const onHandlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.stopPropagation()
+      handlePressStart.current = { x: e.clientX, y: e.clientY }
+      const ev = e.nativeEvent
+      handlePressTimer.current = window.setTimeout(() => {
+        handlePressTimer.current = null
+        navigator.vibrate?.(15)
+        controls.start(ev)
+      }, LONG_PRESS_MS)
+    },
+    [controls],
+  )
+
+  const onHandlePointerMove = useCallback((e: React.PointerEvent) => {
+    const start = handlePressStart.current
+    if (!start || handlePressTimer.current === null) return
+    // A shaky tap shouldn't accidentally lift the card — only a still hold does.
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > MOVE_CANCEL_PX) {
+      clearTimeout(handlePressTimer.current)
+      handlePressTimer.current = null
+    }
+  }, [])
+
+  const endHandlePress = useCallback(() => {
+    if (handlePressTimer.current !== null) {
+      clearTimeout(handlePressTimer.current)
+      handlePressTimer.current = null
+    }
+    handlePressStart.current = null
+  }, [])
 
   // A gesture ends with a synthetic click; swallow the toggle right after one.
   const wasDrag = () => Date.now() - lastDragEnd.current < 250
@@ -223,7 +246,6 @@ export function HabitCard({
       onDragStart={() => setDragging(true)}
       onDragEnd={() => {
         setDragging(false)
-        reorderLifted.current = false
         lastDragEnd.current = Date.now()
         onReorderCommit()
       }}
@@ -286,10 +308,13 @@ export function HabitCard({
               ? `color-mix(in srgb, ${habit.color} 55%, var(--line))`
               : 'var(--line)',
           borderStyle: notStarted ? 'dashed' : 'solid',
+          // Native vertical scroll always — reorder-drag is triggered only
+          // from the dedicated grip handle, never from the card body.
+          touchAction: 'pan-y',
         }}
         animate={{ opacity: notStarted ? 0.62 : 1 }}
         transition={{ duration: 0.35, ease: 'easeOut' }}
-        className="relative z-10 flex touch-pan-y select-none items-center gap-3.5 overflow-hidden rounded-[20px] border p-3.5 transition-[border-color,background-color]"
+        className="relative z-10 flex select-none items-center gap-3.5 overflow-hidden rounded-[20px] border p-3.5 transition-[border-color,background-color]"
         onClick={handleSurfaceClick}
         role="button"
         aria-pressed={habit.done_today}
@@ -321,6 +346,23 @@ export function HabitCard({
             />
           </>
         )}
+
+        {/* grip handle — the only place a long-press lifts the card to reorder
+            (see the top-of-file comment for why it's not the whole card) */}
+        <button
+          aria-label={`Reorder ${habit.name}`}
+          onPointerDown={onHandlePointerDown}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={endHandlePress}
+          onPointerCancel={endHandlePress}
+          onPointerLeave={endHandlePress}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+          className="relative z-10 -ml-1 flex h-11 w-6 flex-none touch-none select-none items-center justify-center text-muted transition-colors hover:text-ink"
+          style={{ cursor: dragging ? 'grabbing' : 'grab' }}
+        >
+          <GripVertical size={16} />
+        </button>
 
         {/* icon chip — shortcut to details; pulses gently when not-yet-started to
             invite a tap that backfills it into this day */}
