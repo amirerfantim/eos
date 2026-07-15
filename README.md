@@ -34,3 +34,7 @@ eos/
 
 - **v1** (current): create/edit/delete habits, mark done daily, streaks, day-progress ring, contribution heatmap, dark/light theme, PWA.
 - **Later**: reminders/notifications, cloud deploy + domain, offline sync, auth, custom schedules, stats.
+
+## License
+
+MIT
